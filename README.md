@@ -178,7 +178,7 @@ If you build something with FANTASIA we'd love to hear about it — get in touch
 <!-- CONTACT -->
 ## Contact
 
-**Antonio Origlia** — antonio.origlia [at] unina.it
+**Antonio Origlia** — antonio.origlia [at] unior.it
 
 - Project: [github.com/antori82/FANTASIA](https://github.com/antori82/FANTASIA)
 - Wiki: [github.com/antori82/FANTASIA/wiki](https://github.com/antori82/FANTASIA/wiki)
