@@ -1785,3 +1785,77 @@ the migration is not minor: it touches two contracts, a dependency and an ADR. S
 ride the shipped 5.8 line, and every story here carries `Target line: 5.9`. That follows
 from the two approvals rather than from a choice made here, but it is the first time the
 two have been put together.
+
+## J-0055 | 2026-11-12 | TEAM | lead
+- Changes: team.json, team.md, brief.md, verification/core-dev.md, verification/speech-dev.md, verification/reasoning-dev.md, verification/build-dev.md, verification/test-dev.md
+
+The team is derived and approved. Nine agents, mode `subagents`, ownership on in observe
+mode because the project is adopted: the hook logs would-be violations to
+`.ateam/ownership.jsonl` and lets the edit through.
+
+**Roster.** `planner` (opus). Five coders: `core-dev` (M-core, M-llm, M-neo4j, M-demo),
+`speech-dev` (M-asr, M-tts, M-ace), `reasoning-dev` (M-prolog, M-probabilistic, M-ml),
+`build-dev` (M-dist, C#), all opus, and `test-dev` (M-tests, sonnet). Then `tester`
+(sonnet), `security` (opus) and `reviewer` (opus). Five on opus, because every coder
+cluster contains a contract provider with two or more consumer modules and a mistake here
+ships as a broken prebuilt binary to users who cannot rebuild it.
+
+**Mode.** `subagents`, not `team`. The checker reports a contract-first width of 12, and
+acting on it would be the mistake it warns about: all twelve contracts are
+`Provenance: recovered`, version 1, and not one has a contract test — several were
+corrected during the adoption review, which is what an immature contract looks like. The
+work in hand is sequential too (US-020 before US-021, because FANTASIAACE links ACERuntime
+and cannot be rebuilt until NV_ACE_Reference exists for 5.8).
+
+**The one place the rules could not all hold, decided by the user.** Five coders exceeds
+the policy's cap of four. The checker requires every module to be assigned to an agent and
+forbids a tester from owning one, so the automation suite needs a coder; M-dist needs a C#
+coder of its own; and that leaves the nine C++ component modules for two coders if the cap
+is to hold, which would mean one owner for seven modules spanning shared types, two HTTP
+back ends, Bolt framing, Prolog threading, aGrUM and libsvm — the cluster the splitting
+rule says to split. The alternative that holds the cap, folding M-tests into `core-dev`,
+was put to the user with its cost (every behavioural change becomes a cross-coder request
+to update the test that pins it) and rejected in favour of the fifth coder. The right end
+state is neither: dissolve M-tests and fold its per-component test files into each
+module's Paths, so every coder owns its own tests. That is an architecture change, not a
+staffing decision, and it would bring the roster back to four coders.
+
+**Deviations from the standard structure**, all recorded in team.md with their reasons:
+the three module `CLAUDE.md` files are per source tree rather than per module and belong
+to the planner, because nine modules share two directories and no single coder can own a
+file covering several coders' modules; M-dist has no directory at all, so its state lives
+in C-build and C-install; and `gates.task_completed` is `null` with `gates.quality` empty,
+which is the honest state — no contract tests exist, the suite needs the editor, there is
+no `.clang-format` and neither clang tool is installed, UBT emits no compilation database,
+and the `Build.cs` files belong to no solution for `dotnet format` to act on. Filling
+those in with commands that cannot run would make the clean-code promise prose.
+
+**Rejected alternatives**, with reasons, in team.md: `team` mode, `single` mode, one C++
+coder, one coder per module, a separate owner for M-core, cheaper coders on sonnet with
+`advisorModel`, an interface and personas designer (the product has no screens; its
+people-facing surface is a Blueprint API whose ergonomics live in the contracts), and no
+security engineer.
+
+**The security engineer is on the team** because the system has credentials in four
+components, a network endpoint in each of them, Prolog goals and Cypher built from
+strings, and a vendored tree of seven third-party projects — and because the two findings
+that matter most right now, F-008 and F-011, are both credential exposures found by
+accident rather than by anyone looking. Its first task, before the first story it reviews,
+is `docs/ateam/threat-model.md`.
+
+**The team is local to this machine, by the user's decision**, which closes the open
+question the adoption deferred to staffing. `.gitignore` excludes `.claude/` and
+`CLAUDE.md`, so the nine agent definitions, the root protocol block, the three module
+state documents and the dashboard configuration are untracked by choice. `docs/ateam/`
+is tracked, so the design travels with the repository and the team does not; a reclone
+re-derives it from team.json. Recorded as a constraint in the brief.
+
+**Settings were not applied.** There is no `.claude/settings.json` at the repository root
+for the renderer to add allow rules to, and settings are proposed rather than applied.
+`.ateam/` is already gitignored.
+
+Still open after staffing: REQ-003 and REQ-004 show as awaiting evaluation, because the
+user's answers were logged after the planner's verdicts and were handled through CR-002
+and CR-003; the planner owes each a closing `evaluated` entry. Next is `/ateam:sprint`,
+whose first sprint is US-020 then US-021, with the threat model as the security engineer's
+first task.

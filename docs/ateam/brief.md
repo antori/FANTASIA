@@ -1,5 +1,5 @@
 # Brief: FANTASIA
-- As of: J-0043
+- As of: J-0055
 - Approved: yes
 - Provenance: recovered
 - Kind: software
@@ -94,6 +94,11 @@ elicited from the user, and the journal records when.
   for this non-commercial project; DLSS and Streamline cannot be redistributed at all.
 - Secrets: API keys and endpoint headers are Config UPROPERTYs read from
   DefaultGame.ini, never committed and never defaulted to a real key.
+- The ATeam team definition is local to the maintainer's machine: `.gitignore` excludes
+  `.claude/` and `CLAUDE.md`, so the agent definitions, the root protocol block, the
+  per-tree module state documents and the dashboard configuration are untracked by
+  choice. `docs/ateam/` is tracked, so the design travels with the repository and the
+  team does not. A reclone re-derives the team from `team.json` with `/ateam:staff`.
 - No continuous integration exists. Verification is local: the FANTASIATests
   automation suite plus a dumpbin check on refreshed DLLs.
 - Single maintainer, no funded development time: machinery must survive long gaps
@@ -119,9 +124,10 @@ were elicited from the user, and the journal records when.
 
 ## Open questions
 
-- .gitignore excludes `.claude/` and `CLAUDE.md`. Whether the team definition and the
-  per-module state documents are tracked with the repository or stay local to the
-  maintainer's machine is deferred to staffing.
+- The project's one mechanical gate is missing: there is no command fast enough to verify
+  a task, because the automation suite needs the editor and no contract test exists.
+  `gates.task_completed` is `null` until the first sprint produces one. Related: C++ has
+  no `.clang-format` and no quality gate at all.
 - No NFR has a measure. The real-time paths (microphone-to-transcript latency, text-to-
   first-sound for TTS, audio-to-blendshape sync for Audio2Face) have no stated budget,
   so NFR-001 to NFR-003 carry `Measure: unknown` until one is set or measured.
