@@ -1,8 +1,8 @@
 # Architecture: FANTASIA
-- Design version: 1
-- Status: draft
-- As of: J-0027
-- Approved: pending
+- Design version: 3
+- Status: approved
+- As of: J-0054
+- Approved: yes
 - Origin: adopted 2026-11-12
 
 ## Context and constraints
@@ -38,6 +38,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Models, GPU stacks, build-time static libraries and vendor bundles are published as release assets and fetched by bootstrap (ADR-0007).
 - Bootstrap installs the whole turnkey stack by default and is narrowed by opt-out flags (ADR-0008).
 - aGrUM is vendored as per-module static libraries, linked ID then BN then BASE (ADR-0009).
+- aGrUM moves to the 3.x line, with KTBN dynamic Bayesian networks exposed first; the target version and the static library targets are established by building, never asserted, and the contracts follow when the migration lands (ADR-0015, amending ADR-0009).
 - Word and character timing from ElevenLabs is captured internally but not exposed to Blueprints (ADR-0010).
 - Whisper CPU inference is statically linked into the plugin module; linking a prebuilt CUDA whisper requires an explicit opt-in (ADR-0011).
 - One configurable OpenAI-compatible component replaces the provider-specific components (ADR-0012).
@@ -114,7 +115,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Build discrete probabilistic models and influence diagrams from Blueprints and run exact inference over them.
 - Paths: FANTASIA/Source/FANTASIA/Public/BayesianNetwork.h, FANTASIA/Source/FANTASIA/Private/BayesianNetwork.cpp, FANTASIA/Source/FANTASIA/Public/InfluenceDiag.h, FANTASIA/Source/FANTASIA/Private/InfluenceDiag.cpp
 - Language: cpp
-- Satisfies: US-012, US-013, NFR-004
+- Satisfies: US-012, US-013, US-022, US-023, NFR-004
 - Depends on: M-core, M-ml, M-dist
 - Provides: C-probabilistic
 - Consumes: C-fantasia-types, C-math, C-build
@@ -153,7 +154,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Feed synthesized speech to NVIDIA Audio2Face so a MetaHuman face animates from it, and close the session at end of turn.
 - Paths: FANTASIAACE/Source/FANTASIAACE/Public/, FANTASIAACE/Source/FANTASIAACE/Private/
 - Language: cpp
-- Satisfies: US-017, NFR-003
+- Satisfies: US-017, US-021, NFR-003
 - Depends on: M-tts, M-core
 - Provides: C-ace-tts
 - Consumes: C-rest-tts, C-elevenlabs-protocol, C-fantasia-types
@@ -192,7 +193,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Decide how the plugins are compiled, linked, staged and installed, and how a user gets from a clone to a running plugin.
 - Paths: FANTASIA/Source/FANTASIA/FANTASIA.Build.cs, FANTASIA/Source/FANTASIATests/FANTASIATests.Build.cs, FANTASIAACE/Source/FANTASIAACE/FANTASIAACE.Build.cs, FANTASIA/FANTASIA.uplugin, FANTASIAACE/FANTASIAACE.uplugin, FANTASIA/bootstrap.bat, FANTASIA/bootstrap.sh, FANTASIA/build_whisper_cuda.bat, FANTASIA/build_whisper_cuda.sh, FANTASIA/setup_whisper.bat, FANTASIA/setup_whisper.ps1, FANTASIA/setup_whisper.sh, FANTASIA/enable-plugins.ps1, FANTASIA/Binaries/, FANTASIAACE/Binaries/, README.md, THIRD_PARTY_LICENSES.md, LICENSE, .gitignore, .gitattributes
 - Language: csharp
-- Satisfies: US-018, US-019, NFR-005
+- Satisfies: US-018, US-019, US-020, US-021, US-022, NFR-005
 - Depends on: none
 - Provides: C-build, C-install
 - Consumes: none
@@ -245,11 +246,18 @@ real-time discipline applies and where no measure exists yet.
 
 ## Walking skeleton
 
-The skeleton already exists and ships: a `UWhisperCaptureComponent` hears an utterance,
-an `UOpenAICompatibleComponent` or `ULangGraphComponent` answers it, a
-`UElevenLabsTTSComponent` speaks the answer, and — with `FANTASIAACE` enabled — a
-`UACEElevenLabsTTSComponent` animates a MetaHuman face from the same audio. The
-FANTASIA-LangGraphDemo project is that path wired up end to end.
+The skeleton already exists and ships, and lives entirely in this repository: a
+`UWhisperCaptureComponent` hears an utterance, an `UOpenAICompatibleComponent` or
+`ULangGraphComponent` answers it, a `UElevenLabsTTSComponent` speaks the answer, and —
+with `FANTASIAACE` enabled — a `UACEElevenLabsTTSComponent` animates a MetaHuman face
+from the same audio. Every piece of that path belongs to a module here, so the skeleton
+is verifiable from this repository alone.
+
+The FANTASIA-LangGraphDemo project illustrates the path wired into a running application,
+and is maintained as its own project in its own repository, in the same arrangement as
+the project wiki (ADR-0014). No module here owns it, no contract covers it, and work on
+it is not planned from this backlog. It is an illustration, not evidence: nothing in this
+architecture may rest on it.
 
 ## Accepted risks
 

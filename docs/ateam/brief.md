@@ -1,6 +1,6 @@
 # Brief: FANTASIA
-- As of: J-0027
-- Approved: pending
+- As of: J-0043
+- Approved: yes
 - Provenance: recovered
 - Kind: software
 - Platforms: Windows (Win64)

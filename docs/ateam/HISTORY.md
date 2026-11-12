@@ -963,3 +963,825 @@ the twelve recovered contracts — and the second is the in-flight work: the ACE
 to 5.8 and the promotion to main. The project counts as under control when the checker
 is clean, reflexion stays clean, and one sprint passes with no entry in
 `.ateam/ownership.jsonl`; then a change request flips `observe_only` to false.
+
+## J-0028 | 2026-11-12 | REQ-001 | lead
+- Event: received
+- Source: user
+- Text: Ship the UE 5.8 line on main accepting minor fixes only, because the 5.9 preview is coming. Plan the big changes for 5.9 instead. This makes 5.8 a maintenance line and 5.9 the target for feature work.
+- Changes: none
+
+## J-0029 | 2026-11-12 | REQ-002 | lead
+- Event: received
+- Source: user
+- Text: Update the tutorials on the project YouTube channel, produced with AI: screen-record the editor to show the examples, plan the voice-over text together with the user, and generate the narration with the user's cloned ElevenLabs voice through a connector.
+- Changes: none
+
+## J-0030 | 2026-11-12 | REQ-003 | lead
+- Event: received
+- Source: user
+- Text: Update the demo project, FANTASIA-LangGraphDemo, a separate repository at codeberg.org/antori/FANTASIA-LangGraphDemo.
+- Changes: none
+
+## J-0031 | 2026-11-12 | REQ-004 | lead
+- Event: received
+- Source: user
+- Text: Update the aGrUM version in use (the repository vendors 2.3.2) and expand support to more of aGrUM's model families, to explore new ways of conducting decisions for 'raison d'exprimer'-like AI.
+- Changes: none
+
+## J-0032 | 2026-11-12 | F-014 | lead
+- Event: opened
+- Story: US-018, US-019
+- Module: M-dist
+- Kind: bug
+- Severity: major
+- Repro: gh release view runtime-v3.0 --repo antori82/FANTASIA lists exactly three assets: fantasia-build-deps-win64.tar.gz, fantasia-gpu-cuda13-win64.tar.gz, whisper-large-v3-turbo-q5_0.bin. bootstrap.bat on Development sets RELEASE_TAG=runtime-v3.0 (line 46) and ACE_ASSET/MARK_ASSET/JAMES_ASSET/CLAIRE_ASSET to nv-ace-reference-ue58-full.tar.gz and nv-audio2face-{mark,james,claire}-ue58.tar.gz (lines 51-54). None of those four exists on that release; the NVIDIA bundles exist only on runtime-v2.0, as ue57 builds.
+- Changes: none
+
+The 5.8 line's default install cannot complete. ADR-0008 makes the unflagged bootstrap
+run install everything, and on Development that run asks runtime-v3.0 for four NVIDIA
+assets the release does not contain, so the whole Audio2Face half fails for every user
+who does not pass --no-nvidia.
+
+This contradicts US-018's acceptance criteria as written, C-install's invariant that the
+default run needs no flags and no decisions, NFR-005 and G-3. US-018 and US-019 are
+recorded Status: done, which was true of the 5.7 line and is not true of the 5.8 line.
+
+Falling back to the ue57 bundles on runtime-v2.0 is not a fix: NVIDIA's 5.7-built
+plugins fail the engine BuildId check under 5.8, which is the whole reason the assets
+are versioned per engine. The fix is to build the NVIDIA ACE 5.8 bundles and publish
+them to runtime-v3.0 -- the ACE 5.8 re-port that was already known to be outstanding.
+
+This blocks shipping 5.8 on main (REQ-001): a release whose documented one-command
+install fails by default is not a release. It should be settled before promotion, not
+after.
+
+## J-0033 | 2026-11-12 | F-015 | lead
+- Event: opened
+- Story: US-018
+- Module: M-dist
+- Kind: bug
+- Severity: minor
+- Repro: bootstrap.sh line 33 sets GPU_ASSET=fantasia-gpu-cuda13-linux.tar.gz. That asset is on neither runtime-v3.0 nor runtime-v2.0; both carry only fantasia-gpu-cuda13-win64.tar.gz.
+- Changes: none
+
+The Linux bootstrap's GPU fetch names an asset that has never been published, so
+--no-gpu is effectively mandatory on Linux and the default run reports a failed
+download.
+
+Severity is minor because NG-2 and P-09 make Win64 the supported platform and the Linux
+script is explicitly best effort. It is recorded because the script offers the option
+without saying it cannot work, which is the same shape of problem as F-013: the
+documented surface and the published reality disagree.
+
+Either publish a Linux GPU stack or have bootstrap.sh say the GPU path is Win64-only and
+skip it.
+
+## J-0034 | 2026-11-12 | F-016 | lead
+- Event: opened
+- Story: US-017, US-019
+- Module: M-ace, M-dist
+- Kind: bug
+- Severity: major
+- Repro: git show Development:FANTASIAACE/Binaries/Win64/UnrealEditor.modules | grep BuildId gives 47537391 while the same file under FANTASIA/Binaries gives 55116800; git show --stat 94e906a8 shows it touched only FANTASIA/Binaries
+- Changes: none
+
+FANTASIAACE.uplugin on Development declares EngineVersion 5.8.0, and every committed
+FANTASIAACE binary is still the 5.7 build.
+
+Committed BuildIds on Development:
+  FANTASIA/Binaries/Win64/UnrealEditor.modules                     55116800  (5.8, correct)
+  FANTASIA/Binaries/Win64/UnrealEditor-Win64-DebugGame.modules      55116800  (5.8, correct)
+  FANTASIAACE/Binaries/Win64/UnrealEditor.modules                   47537391  (5.7)
+  FANTASIAACE/Binaries/Win64/UnrealEditor-Win64-DebugGame.modules   47537391  (5.7)
+
+47537391 is UE 5.7's CompatibleChangelist. The installed UE 5.8 is a promoted
+++UE5+Release-5.8 build with Changelist 55116800 and CompatibleChangelist 0, so its
+effective compatible changelist is 55116800 -- which core matches and the companion does
+not.
+
+The cause is visible in the commit: 94e906a8 "Refresh prebuilt FANTASIA DLLs for UE 5.8"
+touched six files, all under FANTASIA/Binaries/. FANTASIAACE/Binaries/ was not rebuilt.
+The working-tree ACE .modules files are dated 17 June and the core ones 24 July.
+
+Effect: a user on 5.8 who enables FANTASIAACE is told the plugin was built with a
+different engine version, and lip-sync does not load. Core FANTASIA is fine, so the
+failure looks like an ACE problem rather than a packaging one.
+
+This is exactly the omission P-12 exists to prevent and exactly the failure the fourth
+success criterion names, and it blocks shipping 5.8 on main (REQ-001) independently of
+F-014. The fix is to rebuild the FANTASIAACE Win64 Development and DebugGame binaries
+against 5.8, dumpbin-verify them, and commit them as their own refresh commit.
+
+Note for whoever does it: FANTASIAACE links ACERuntime and ACECore, so building it needs
+NVIDIA's NV_ACE_Reference present and itself built for 5.8. No 5.8 build of NV_ACE_Reference
+exists on this machine -- the copies under Alice, FedericoII and FANTASIA-LangGraphDemo are
+all 5.7/47537391, and UE_5.8 has no Engine/Plugins/Marketplace directory at all. So F-014
+and this finding share a prerequisite.
+
+## J-0035 | 2026-11-12 | REQ-001 | lead
+- Event: received
+- Source: user
+- Text: Clarification on the 5.8 prerequisites: the DLLs already built for 5.8 are the FANTASIA core ones (commit 94e906a8). The NVIDIA ACE 5.8 re-port has NOT been done. So F-014 (ue58 NVIDIA bundles absent from runtime-v3.0) and F-016 (FANTASIAACE binaries still the 5.7 build) both stand, and the ACE 5.8 port is a genuine prerequisite story for this request rather than a publish step.
+- Changes: none
+
+## J-0036 | 2026-11-12 | REQ-001 | planner
+- Event: evaluated
+- Evaluation: accepted
+- Serves: G-3 (ship prebuilt: clone, bootstrap, enable, no compilation), and G-5
+- Principles: P-01 n/a; P-02 n/a; P-03 engaged -- the 'minor fixes only' bar and the 5.9 feature target are a new standing rule, so that half of the request is held for a CR of type principle; P-04 ok; P-05 ok; P-06 n/a (the NVIDIA bundles are an existing shipped dependency rebuilt for 5.8, not a new one); P-07 ok (US-020 is the prerequisite F-014 names, nothing beyond it); P-08 ok; P-09 ok; P-10 ok; P-11 ok (NVIDIA's A2F models are redistributed, not trained or served by us); P-12 ok -- the 5.8 prebuilt refresh already landed (94e906a8) and any further runtime source change re-triggers it; P-13 ok -- no story promotes anything; the cherry-pick or fast-forward stays the user's; P-14 ok and its precondition is met (the 5.7 branch exists at main's tip db9f4244), but the policy half narrows it, so the CR must say whether a preview engine counts as 'newest'; P-15 ok; P-16 carried into US-020's acceptance, since the bundles are republished artifacts; P-17 ok -- the bundles stay release assets, not git; P-18 ok.
+- Reason: Two asks in one request. Shipping 5.8 is accepted with one prerequisite: F-014 means the 5.8 line's documented one-command install fails by default, so promoting it as it stands would contradict G-3, NFR-005 and the first success criterion. US-020 clears it. US-018 and US-019 were recorded done on the strength of the 5.7 line and are not true of the 5.8 line, so both drop to ready and US-018 now depends on US-020. The maintenance-line half is held, not accepted: 'minor fixes only' is not a bar the planner can apply at intake without an operational definition, and writing one is a new project principle, which P-03 makes a CR of type principle. 'Plan the big changes for 5.9' waits on the same CR and on 5.9 existing: P-14 already prescribes the switch, and the backlog has no engine-line dimension in which a 5.9-targeted story could sit.
+- Outcome: US-020; plus a CR of type principle for the maintenance-line policy, not raised here
+- Changes: backlog.md, architecture.md
+
+Accepted in part. The shippable half becomes US-020 and two status corrections; the
+maintenance-line policy is held for a change request.
+
+What the CR of type `principle` must settle, because the planner cannot apply the bar
+without it:
+
+1. An operational definition of "minor fix" that decides at intake. A workable one:
+   touches no contract, no module boundary, no ADR and no dependency; changes no
+   Blueprint-facing signature, so it cannot invalidate a user's compiled assets;
+   estimate S or M. Any definition is better than none -- an undefined bar is one the
+   planner cannot reject against, so in practice it would admit everything.
+2. Whether the open major findings are admitted on 5.8 as minor fixes. This is the
+   decision with teeth. F-008 is two UPROPERTY specifiers, so it passes any size bar,
+   but it changes where a secret is read from and existing assets must be re-saved.
+   F-011's fix changes C-neo4j, so a contract-touching bar excludes it -- which parks a
+   live defect that sends Neo4j credentials in the clear whenever a user sets UseSSL
+   against a bolt:// endpoint. Deferring that one to 5.9 should be said out loud, not
+   fall out of a definition.
+3. How P-14 reads while a preview exists. P-14 says main carries the newest supported
+   engine; the request treats 5.8 as the shipped line and 5.9 as the target. Name the
+   trigger for branching 5.8 and moving main to 5.9 (5.9 release? 5.9 preview? the first
+   5.9-only feature?), so the switch is not a judgement call each time.
+4. Where 5.9-targeted work accumulates before 5.9 exists. The backlog has no engine-line
+   dimension: a story is `draft`, `ready` or `done`, with nothing to say which line it
+   targets. Either stories carry a target-line field, or 5.9 work waits unlogged, which
+   loses it.
+
+Two questions the lead should put to the user, neither of which changes the verdict:
+
+- Are the NVIDIA ACE 5.8 bundles already built locally and merely unpublished? If so
+  US-020 collapses from a re-port to an upload, and its estimate drops from L to S. The
+  story is written to be agnostic about which.
+- Nothing in F-014's text is in doubt, but its severity is: `major` as logged, when its
+  effect is that no story it names can be `done`, which is this method's own definition
+  of a blocker. Left as logged, since the status corrections below carry the same fact
+  where the planner has authority, and since the one mechanical consequence of `blocker`
+  -- the checker's "done but blocker open" error -- cannot fire now that neither story
+  is done. If the lead disagrees, re-log it with `Corrects=J-0032`.
+
+Status corrections in backlog.md, which the planner owns:
+
+- US-018 `done` -> `ready`, `Depends on: none` -> `US-020`. Its acceptance says the
+  default run fetches the NVIDIA ACE bundle and places the plugins next to FANTASIA.
+  F-014 makes that false on the live line, so `done` was a statement about 5.7.
+- US-019 `done` -> `ready`. A Blueprint-only user who follows the documented install on
+  5.8 does not arrive at a working Audio2Face half, and FANTASIAACE's own 5.8 prebuilt
+  state is unverified here. Narrower than US-018's case, and flagged as a judgement:
+  core FANTASIA does load, so a reviewer could defend leaving this one `done`.
+
+No story is written for the promotion itself. P-13 makes it the user's cherry-pick or
+fast-forward, and the readiness criteria are already US-018, US-019 and the second
+success criterion.
+
+## J-0037 | 2026-11-12 | REQ-002 | planner
+- Event: evaluated
+- Evaluation: needs-info
+- Serves: G-5 as a candidate (usable and citable research infrastructure); not established until the questions are answered
+- Principles: P-01 n/a; P-02 engaged -- no module's paths cover a voice-over script, a shot list or published media, so if the artifact were tracked here no coder could own it; P-03 ok (no design changes yet); P-04 ok; P-05 n/a; P-06 n/a -- recording uses tools already on the machine (ffmpeg with gdigrab and h264_nvenc, OBS with obs-websocket) and adds nothing to the plugin; a connector would be a session tool, not a plugin dependency; P-07 ok; P-08 ok; P-09 ok; P-10 ok -- tutorials for a public academic channel, with no commercial justification; P-11 ok -- narration calls a TTS service, or FANTASIA's own component, and trains nothing; P-12 n/a; P-13 n/a; P-14 engaged only in that a tutorial must show the engine version the line ships; P-15 engaged -- if narration runs through UElevenLabsTTSComponent the key stays in DefaultGame.ini and must reach neither the repository nor the recording; P-16 n/a; P-17 engaged -- a rendered video is a heavy artifact and cannot be committed; P-18 ok.
+- Reason: Capture is feasible on this machine (ffmpeg with gdigrab and h264_nvenc, OBS with obs-websocket, desktop control to drive the editor), so tooling is not what blocks this. What is missing is a testable target: 'the tutorials' names no set, 'updated' names no state, and the deliverable has no decided home -- the precedent for a documentation channel here is the wiki, which is managed outside this repository. No Given/When/Then can be written that decides pass or fail. Narration is unsettled too: the registry's ElevenLabs connector advertises voice-agent tools, so synthesis with the cloned voice is unverified, though FANTASIA's own UElevenLabsTTSComponent is a fallback that would dogfood US-006 and US-007. Five questions in the body. If the answer to the scope question is 'tracked in this repository', this returns as requires-change, because P-02 then needs a module that owns tutorial artifacts.
+- Outcome: none -- no story until the questions are answered
+- Changes: none
+
+The questions, in the order that unblocks the most:
+
+1. Which tutorials, and what makes one done? Name the list. "The tutorials" is not a set
+   the acceptance can be written against. For each, say whether it is a re-record of an
+   existing video against 5.8 or a new one. Note what changed under the tutorials since
+   they were made: the provider-specific OpenAI, Groq and Ollama components are gone in
+   favour of one `UOpenAICompatibleComponent` (ADR-0012), Neo4j now speaks plain TCP by
+   default (ADR-0003), Audio2Face lives in a separate plugin (ADR-0005), and ACE TTS
+   needs an explicit End Turn. Any tutorial showing the old components is wrong, not
+   merely dated.
+2. Where does the tracked artifact live? The voice-over script and the shot list are
+   text that should outlive the video. Either they are tracked in this repository -- in
+   which case this comes back as `requires-change`, because no module's paths cover
+   tutorial artifacts and P-02 needs one owner -- or tutorials are managed outside it,
+   as the wiki is, and this request leaves the ATeam backlog with no story. A rendered
+   video cannot be committed either way (P-17).
+3. Narration. Three options, and the choice is the user's: (a) connect an ElevenLabs
+   connector that exposes synthesis with a chosen voice id -- the one in the registry
+   advertises voice-*agent* tools, so this is unverified; (b) generate the narration
+   through FANTASIA's own `UElevenLabsTTSComponent` in the editor, which needs only the
+   key in DefaultGame.ini and dogfoods US-006 and US-007; (c) the user records it. Option
+   (b) is the recommendation: it needs no new capability and it exercises the product.
+4. Publishing. Who uploads, and is channel copy (titles, descriptions, links) part of the
+   deliverable? Nothing will be published to a public channel without a go-ahead per
+   upload.
+5. What is recorded? A scene built for the recording, or the demo project -- which is
+   REQ-003's separate repository, and would couple this request to that one.
+
+Capture tooling is available and was confirmed on the machine: ffmpeg with the gdigrab
+demuxer and the h264_nvenc encoder (the RTX 4060's encoder block is separate from its
+CUDA cores, so recording does not compete with the editor for the 8 GB of VRAM), OBS
+Studio with obs-websocket for scriptable scene switching and recording, and desktop
+control to drive the editor. Recording is not what blocks this request.
+
+## J-0038 | 2026-11-12 | REQ-003 | planner
+- Event: evaluated
+- Evaluation: requires-change
+- Serves: G-1 and G-5 (the demo is the walking skeleton), if the CR brings it into scope
+- Principles: P-01 n/a; P-02 engaged -- the demo lives in another repository, so no module's paths cover it and a story could name no file a coder owns; P-03 engaged -- giving it a home, or recording it as out of scope, changes architecture.md; P-04 ok; P-05 n/a; P-06 n/a; P-07 ok; P-08 ok, and in its favour -- the demo is exactly where turn-taking policy belongs, which is why it is not in the plugin; P-09 ok; P-10 ok; P-11 ok; P-12 n/a; P-13 n/a (that repository has its own history); P-14 engaged -- the demo must track the engine line it demonstrates; P-15 ok; P-16 n/a; P-17 n/a; P-18 ok.
+- Reason: Serves G-1 and G-5 and crosses no non-goal. It cannot be planned inside the current architecture. FANTASIA-LangGraphDemo is a separate repository at codeberg.org/antori/FANTASIA-LangGraphDemo, not checked out here; the adoption scope is every first-party source, script and manifest file in this repository; and architecture.md already names the demo as the walking skeleton while owning none of it. So a load-bearing artifact has no module, no owner and no contract, and P-02 leaves a story nowhere to land. Closing that gap is the CR. What 'update' means is unspecified as well, and no estimate is honest without it.
+- Outcome: a CR of type architecture, not raised here; the request waits for it
+- Changes: none
+
+What the CR must settle, in one decision with two branches:
+
+- In scope. The demo repository gets a module of its own with its paths, an owner, and a
+  statement of how a second repository is cloned, verified and kept in step with the
+  plugin line it demonstrates. That is new ground for this architecture: every current
+  module's paths are inside this repository, the checker resolves them against it, and
+  P-02's one-owner rule assumes a single tree. The CR has to say how a cross-repository
+  module is represented, not merely that there is one.
+- Out of scope. The demo is recorded as managed separately, as the wiki is, and demo work
+  is routed to its own project. architecture.md then says so where it names the demo as
+  the walking skeleton, so the next reader does not take the reference for ownership.
+
+Either way the architecture stops naming an artifact it does not own. Today the Walking
+skeleton section says "The FANTASIA-LangGraphDemo project is that path wired up end to
+end", which makes the demo load-bearing evidence for the skeleton while no module, owner
+or contract covers it.
+
+Second thing to settle, which is not architecture and will need a request of its own or a
+sentence from the user: what "update" means. Candidates, from what changed in the plugin
+since the demo was built -- the engine line (5.7 to 5.8), the removal of the
+provider-specific OpenAI, Groq and Ollama components in favour of one
+`UOpenAICompatibleComponent` (ADR-0012), the Neo4j plain-TCP default (ADR-0003), the
+split of Audio2Face into FANTASIAACE (ADR-0005) and the End Turn requirement, and
+aGrUM's upgrade. Which of those the demo must absorb decides whether this is an
+afternoon or a sprint, and no estimate is honest without it.
+
+## J-0039 | 2026-11-12 | REQ-004 | planner
+- Event: evaluated
+- Evaluation: requires-change
+- Serves: G-4 (cover the interactive pipeline out of the box, Bayesian and influence reasoning included)
+- Principles: P-01 engaged -- C-probabilistic's invariants name aGrUM 2.x and the ID, BN, BASE link order, and C-build carries the link list, so both contracts change; P-02 ok; P-03 engaged -- ADR-0009 and two contracts cannot change silently; P-04 engaged -- 3.x changes results, not only the build (LIMID optimal policy, MEU variance, evidenceProbability, the aggregators), so the expectations pinned by BayesianNetworkTests and InfluenceDiagTests are part of the change, not fallout from it; P-05 ok; P-06 n/a as a new dependency, but ADR-0009 is the ADR a major version bump amends; P-07 ok; P-08 engaged and decisive -- exposing decision models as components is in scope; deciding when or what the agent says is not (NG-1), and 'new ways of conducting decisions' is one step from a dialogue manager; P-09 ok (Win64 static libs); P-10 ok; P-11 ok, as a judgement I am flagging -- structure learning (PC, FCI) and KTBN order learning estimate a graphical model from data, which is the same shape as US-015's in-plugin SVM training and not the model training, hosting or weight shipping NG-4 denies; P-12 engaged -- relinking the module changes the shipped DLL; P-13 n/a; P-14 n/a; P-15 ok; P-16 engaged -- aGrUM 3.x's licence text must be refreshed in THIRD_PARTY_LICENSES.md; P-17 ok -- the static libs stay release assets; P-18 ok.
+- Reason: Serves G-4 and crosses no non-goal, but neither half can be planned as it stands. The upgrade: C-probabilistic's invariant names aGrUM 2.x and ADR-0009 fixes the link order ID, BN, BASE, while 3.1.0 merged BN with BNLEARNING, made PRM independent and added CM, so the static library target names change -- unconfirmed upstream -- and the C-build link list with them. The API breaks are mechanical; the behaviour changes are not, and they move results the tests pin. The expansion: which model families to expose depends on what the request means, and the phrase 'raison d'exprimer'-like AI could not be resolved here. Since it governs the choice between causal models, dynamic networks, credal networks and structure learning -- four different capabilities -- that half is needs-info, and the question is in the body.
+- Outcome: a CR of type architecture, not raised here; plus one question to the user before the model-family half can be scoped
+- Changes: none
+
+The question that has to be answered before the second half can be planned at all:
+
+> Which kinds of decision do you want the agent to be able to make that it cannot make
+> with a Bayesian network and an influence diagram today? aGrUM 3.x makes four distinct
+> things available in C++, and they are not variants of each other:
+>
+> - **Causal reasoning and counterfactuals** (`CM`, new in 3.0.0): a `CausalModel` over
+>   the network, do-calculus with backdoor and frontdoor set enumeration, ID/IDC
+>   identification, `CausalImpact::impact()`, and counterfactual queries. This answers
+>   "what would have happened if the agent had said something else", which an influence
+>   diagram cannot.
+> - **Dialogue state over time** (KTBN, k-order dynamic Bayesian networks, new in C++ in
+>   3.2.0): inference over a time window, filtering and smoothing, and automatic learning
+>   of the memory order K. This answers "what is going on now given the last k turns".
+> - **Imprecise probabilities** (credal networks, `CredalNet`): decisions under
+>   probabilities that are intervals rather than numbers, for when the CPTs are guesses.
+> - **Structure learned from interaction data** (`PC`, `FCI` with a `PAG`,
+>   `GreedyThickThinning`, now in C++): the model's shape discovered from logged
+>   interactions instead of authored by hand.
+>
+> One of these, or more than one? The phrase "raison d'exprimer"-like AI in the request
+> governs the answer and could not be resolved here, so this is a question and not a
+> guess.
+
+The second thing to settle with it, and the one that keeps the answer inside the brief:
+each of these must arrive as a component the application drives, not as a policy that
+decides what the agent says. That is NG-1 and P-08, and it is a real risk here -- "new
+ways of conducting decisions" is one short step from a dialogue manager, which this
+plugin deliberately is not.
+
+What the CR of type `architecture` must cover for the upgrade half:
+
+1. The target version, pinned. 3.0.0 was released 18 July 2026 and the master changelog's
+   top entry is 3.3.2; the release dates and stable status of 3.1 to 3.3 are unconfirmed
+   here, as is whether 2.3.2 is the last of the 2.x line. The CR picks one version and
+   says why -- 3.3.2 if the newest, but note that 3.3.0 removed `DEFAULT_EPSILON` and
+   friends in favour of `gum::Configuration` and 3.3.2 removed `SimpleMiic`.
+2. ADR-0009, amended. It fixes the link order as ID, then BN, then BASE. 3.1.0 merged BN
+   with BNLEARNING, made PRM an independent CMake module and added CM as a new one; the
+   leaf modules are CM, CN, ID and PRM. The static library target names for 3.x are
+   unconfirmed, so the CR must establish them by building before it asserts a link list.
+   C-build changes with it.
+3. C-probabilistic, version 2. Its invariant names aGrUM 2.x explicitly. If new families
+   are exposed, decide whether they extend this contract or get their own -- M-probabilistic's
+   responsibility line is "discrete probabilistic models and influence diagrams", which
+   does not stretch to a causal model or a learner, and a new module may be the cleaner
+   answer. This contract is also the plugin's public Blueprint surface, so a change
+   invalidates compiled assets in user projects.
+4. The behaviour changes, treated as behaviour and not as a port. These move results the
+   tests pin, so each needs a decision recorded before the port starts: in 3.3.0
+   `ShaferShenoyLIMIDInference`'s optimal policy keeps its decision parents and `MEU()`'s
+   variance now includes covariances between utilities; `evidenceProbability()` in
+   `LazyPropagation` and `ShaferShenoyInference` previously ignored connected components
+   without a target; and the aggregators (`min`, `max`, `median`, `amplitude`, `sum`) now
+   work on values rather than parent indices, which changes results for any range not
+   starting at 0. US-012 and US-013 are pinned by BayesianNetworkTests.cpp and
+   InfluenceDiagTests.cpp, so the CR says which expectations are expected to move and
+   which must not.
+5. The mechanical API breaks, for the impact estimate. `DAGmodel::dag()` and
+   `UGmodel::graph()` return value copies, so code holding `const auto&` must use
+   `internalDag()` / `internalGraph()`; `BNWriter::write()` and subclasses take the BN by
+   non-const reference (we call `writeBIF`); `IDReader::proceed()` returns `Size` rather
+   than void (we call `writeBIFXML`); path functions return `std::optional`;
+   `const std::string&` parameters became `std::string_view` across BayesNet, variables,
+   readers and learning; `StructuralComparator` is now `StructuralMetrics`, `Signaler1/2`
+   are a variadic `Signaler`, `HashTable::tryGet` returns `optional_ref`. Nothing we name
+   in C-probabilistic is renamed -- `BayesNet`, `InfluenceDiagram`, `LazyPropagation`,
+   `ShaferShenoyInference` and `ShaferShenoyLIMIDInference` all survive -- and no
+   `Potential` rename is involved, since that was the 2.x upgrade.
+6. Two side obligations that fall out of it: THIRD_PARTY_LICENSES.md carries aGrUM's
+   licence text and must be refreshed for the new version (P-16), and relinking the
+   module changes the shipped DLL, so the prebuilt refresh applies (P-12). F-005 is worth
+   closing in the same pass: the probabilistic sources include aGrUM headers without
+   honouring `WITH_AGRUM_BINDING`, and every include line is being touched anyway.
+
+## J-0040 | 2026-11-12 | REQ-001 | planner
+- Event: evaluated
+- Evaluation: accepted
+- Serves: G-3 and G-5, as in J-0036
+- Principles: Re-checked against F-016; the J-0036 verdicts stand except these. P-12 CORRECTED -- J-0036 recorded it ok on the strength of commit 94e906a8, but that commit touched only FANTASIA/Binaries, so FANTASIAACE's committed binaries are still the 5.7 build and P-12 was in fact breached when the 5.8 source landed; the breach is open and US-021 is its repair. P-04 engaged -- nothing pins either plugin's prebuilt BuildId, which is how a refresh commit half-finished unnoticed; that check belongs in BootstrapContractTests. P-16 is now carried by US-020's acceptance alone. P-03 unchanged -- the maintenance-line policy is still held for a CR of type principle.
+- Reason: The J-0035 clarification and F-016 change the plan, not the verdict. The ACE 5.8 re-port is real work and not a publish step: no 5.8 build of NV_ACE_Reference exists on this machine, so US-020 keeps its L estimate and is retitled to say what it is. F-016 adds a second prerequisite that US-020 does not cover -- FANTASIAACE's own committed binaries are the 5.7 build (BuildId 47537391 against core's 55116800), so a user who enables the companion on 5.8 is told it was built with a different engine version and lip-sync does not load. That is US-021, which depends on US-020 because FANTASIAACE links ACERuntime and ACECore and cannot be built before NV_ACE_Reference exists for 5.8. US-017 drops from done to ready with it, since F-016 names it and the companion does not load on the live line at all. US-019's demotion, flagged as a judgement in J-0036, is now evidenced rather than judged.
+- Outcome: US-020, US-021; the maintenance-line policy still needs a CR of type principle, not raised here
+- Changes: backlog.md, architecture.md
+
+Same verdict, a second story, and one corrected principle verdict.
+
+Sequencing, since the two prerequisites are not parallel: US-020 first (NV_ACE_Reference
+and the three character plugins rebuilt against 5.8 and published under the names
+bootstrap already asks for), then US-021 (FANTASIAACE's own Win64 Development and
+DebugGame binaries rebuilt against that and committed as their own refresh commit).
+FANTASIAACE links ACERuntime and ACECore, so there is no way to do the second first, and
+F-016 records that no 5.8 build of NV_ACE_Reference exists anywhere on the machine --
+the copies under Alice, FedericoII and the demo project are all 5.7.
+
+Three stories now carry the gate between the 5.8 line and main: US-018 and US-019 from
+F-014, and US-017 from F-016, all moved from `done` to `ready`. None of them was ever
+false of 5.7; each was recorded `done` from the 5.7 line and inherited.
+
+What the planner got wrong in J-0036, recorded rather than quietly fixed: P-12 was
+marked ok because commit 94e906a8 refreshed the prebuilt DLLs for 5.8. It refreshed
+core's and not the companion's, so the principle was breached when the 5.8 source landed
+and the breach is still open. The structural point is worth keeping: P-12 says "the Win64
+prebuilt binaries are rebuilt", and nothing in the repository knows that there are two
+sets of them. A BootstrapContractTests check that every committed `.modules` BuildId in
+both plugins equals the engine's would have caught this the day it happened, and is one
+of the mechanizable-but-unmechanized checks principles.md already complains about.
+
+Still held, unchanged: the "minor fixes only" bar and the 5.9 feature target, for a CR of
+type principle. Nothing in the clarification touches that half.
+
+## J-0041 | 2026-11-12 | REQ-003 | lead
+- Event: received
+- Source: user
+- Text: Decision on the demo project's home: OUT OF SCOPE, managed separately as the wiki is. FANTASIA-LangGraphDemo is not brought into this architecture as a module; demo work is routed to its own project. architecture.md must stop implying ownership where it names the demo as the walking skeleton. The architecture CR therefore takes the second branch the planner described, and no cross-repository module representation is needed.
+- Changes: none
+
+## J-0042 | 2026-11-12 | REQ-004 | lead
+- Event: received
+- Source: user
+- Text: Answer to the model-family question: ALL FOUR. Causal reasoning and counterfactuals (CM), dialogue state over time (KTBN k-order dynamic Bayesian networks), imprecise probabilities (credal networks), and structure learned from interaction data (PC, FCI with PAG, GreedyThickThinning). This resolves the needs-info half of REQ-004 and settles what 'raison d'exprimer'-like AI should reach for: all four capability families, each exposed as a component the application drives. The architecture CR for the 3.x upgrade still stands, and its scope is now four new capability surfaces rather than one, so it will need splitting into separately shippable stories.
+- Changes: none
+
+## J-0043 | 2026-11-12 | NOTE | lead
+- Changes: brief.md, principles.md, backlog.md, architecture.md
+
+The user approved the brief, principles, backlog and architecture at the adoption gate, which is when the ADOPT entry was written. The documents were left saying 'Approved: pending' and the architecture 'Status: draft', which was an omission in closing the adoption rather than a pending decision. They now record the approval that was given.
+
+Design version stays 1. What the approval covers is the recovered design as adopted, plus the planner's subsequent edits within its own authority: US-020 and US-021 added for REQ-001, and US-017, US-018 and US-019 demoted from done to ready because each was recorded done from the 5.7 line and is not true of 5.8.
+
+Three change requests are queued and will raise the design version when they land: a principle CR for the maintenance-line policy (REQ-001), an architecture CR recording the demo as managed separately (REQ-003, the user chose that branch), and an architecture CR for the aGrUM 3.x upgrade and the four model families (REQ-004). Approving version 1 is approving what is, not foreclosing those.
+
+## J-0044 | 2026-11-12 | CR-001 | lead
+- Event: proposed
+- Type: principle
+- Class: major
+- Impact: New principle governing what the 5.8 line admits, plus a change to how P-14 is read. Stories: US-020 and US-021 are the accepted 5.8 work and are unaffected; US-017, US-018 and US-019 are ready and gate the promotion. Findings: F-008 and F-011 are the two open majors whose admission this decides, and F-013, F-014, F-015, F-016 are all M-dist or M-ace defects on the 5.8 line. Contracts: none change, but the proposed definition uses 'touches no contract' as its bar, so C-neo4j decides F-011's fate. Modules: none change. Backlog structure: a target-line dimension would touch every story. Agents: none exist yet (no team.json; staffing has not run), so there is no coder or reviewer to notify and no verification profile to refresh. Tasks in flight: none.
+- Options: (A) Adopt the planner's definition -- touches no contract, no module boundary, no ADR, no dependency; changes no Blueprint-facing signature; estimate S or M -- and decide F-008 and F-011 explicitly on top of it. (B) Adopt the definition but carve out an exception for security findings, so F-011 is admitted despite touching C-neo4j. (C) Define the bar by risk rather than by surface: anything that cannot change a user's results or break their assets is minor, whatever it touches. (D) Don't change: ship 5.8 with no stated bar. Cost of (D): the planner cannot reject anything as too large, so the maintenance line admits everything and 'minor fixes only' becomes a statement of intent with no mechanism; 5.9-targeted work also has nowhere to live and will be lost, since the backlog has no engine-line dimension.
+- Changes: none
+
+Raised from REQ-001, whose policy half the planner held rather than accepted: an
+undefined "minor fix" is a bar it cannot reject against at intake, so in practice it
+would admit everything.
+
+Four things this must settle.
+
+**1. What "minor fix" means, operationally.** The planner proposes: touches no contract,
+no module boundary, no ADR and no dependency; changes no Blueprint-facing signature, so
+it cannot invalidate a user's compiled Blueprint assets; estimate S or M. Any definition
+beats none.
+
+**2. Whether the open majors are admitted on 5.8.** This is the decision with teeth.
+F-008 is two missing `Config` UPROPERTY specifiers, so it passes any size bar -- though
+it changes where a secret is read from and existing assets must be re-saved. F-011's fix
+changes C-neo4j, so a contract-touching bar excludes it, and that parks a defect which
+sends Neo4j credentials in the clear whenever a user sets `UseSSL` against a `bolt://`
+endpoint. Deferring a live credential exposure to 5.9 should be decided out loud, not
+fall out of the wording of (1).
+
+**3. How P-14 reads while a preview exists.** P-14 says main carries the newest supported
+engine version. The request treats 5.8 as the shipped line and 5.9 as the feature target.
+Name the trigger for branching 5.8 and moving main to 5.9 -- the 5.9 release, the 5.9
+preview, or the first 5.9-only feature -- so the switch is not a judgement call each
+time.
+
+**4. Where 5.9-targeted work accumulates before 5.9 exists.** The backlog has no
+engine-line dimension: a story is `draft`, `ready`, `planned`, `in-progress`, `done` or
+`dropped`, with nothing to say which line it targets. Either stories carry a target-line
+field, or 5.9 work waits unlogged and is lost.
+
+Needs the user's approval: a principle change is major by definition, and (2) in
+particular is a risk decision that is not the planner's to make.
+
+## J-0045 | 2026-11-12 | CR-002 | lead
+- Event: proposed
+- Type: architecture
+- Class: minor
+- Impact: architecture.md only: the Walking skeleton section, which today says 'The FANTASIA-LangGraphDemo project is that path wired up end to end' and so makes the demo load-bearing evidence while no module, owner or contract covers it. No module is added, split, merged or removed; no contract changes; no story changes; no test changes. Consequence for the backlog: REQ-003 leaves it with no story, and demo work routes to its own project. Agents: none exist yet. Design version bumps 1 -> 2.
+- Options: (A) Record the demo as managed separately, as the wiki is, and rewrite the Walking skeleton section so it cites the demo as an illustration rather than as an owned artifact -- the branch the user chose. (B) Bring the demo into scope as a cross-repository module, which needs a representation this architecture does not have: every current module's paths are inside this tree and the checker resolves them against it. (C) Don't change: leave architecture.md naming the demo as the walking skeleton with nothing owning it. Cost of (C): the architecture keeps asserting a skeleton it cannot verify, P-02 leaves any demo story nowhere to land, and the next reader takes the reference for ownership -- which is exactly how REQ-003 arrived as requires-change.
+- Changes: none
+
+Raised from REQ-003, which the planner evaluated `requires-change` because the demo is a
+separate repository with no module, owner or contract, while architecture.md's Walking
+skeleton section relies on it.
+
+The user has already chosen the branch, in answer to a question that described this
+option as "recorded as managed separately; architecture.md stops implying ownership
+where it names the demo as the walking skeleton": **out of scope, managed separately as
+the wiki is.** So the substance is decided and this entry records it.
+
+Classed minor: it adds, splits, merges and removes no module, changes no contract and no
+story. It is a clarification of scope, which is why the planner's authority covers it --
+but the decision behind it is the user's and was given explicitly.
+
+What the apply step changes: the Walking skeleton section states that the skeleton ships
+and is illustrated by FANTASIA-LangGraphDemo, which is maintained as its own project and
+owned by no module here, in the same arrangement as the project wiki. Design version goes
+to 2 and an ADR records the decision.
+
+Context for whoever picks the demo up, which is not work for this repository: it is in
+fact checked out locally at `D:\Git\FANTASIA-LangGraphDemo`, and it currently carries the
+5.7 ACE plugins and James only, so it inherits the same 5.8 port dependency as US-020.
+
+## J-0046 | 2026-11-12 | CR-003 | lead
+- Event: proposed
+- Type: architecture
+- Class: major
+- Impact: Contracts: C-probabilistic (its invariants name aGrUM 2.x and the ID/BN/BASE link order) and C-build (it carries the static library link list, which 3.1.0 changes by merging BN with BNLEARNING, making PRM independent and adding CM) -- both break, both bump Version. ADR-0009 is amended or superseded. Modules: M-probabilistic changes and four new capability surfaces must be placed, either in it or in new modules; M-dist changes with the link list; M-tests changes because BayesianNetworkTests and InfluenceDiagTests pin results that 3.3.0 moves. Stories: US-012 and US-013 are the affected done stories; four new story groups come from the four families. NFRs: none directly, but M-probabilistic sits behind no NFR measure. Findings: F-005 (the WITH_AGRUM_BINDING guard M-probabilistic ignores) is in the blast radius and should be fixed in the same pass. Licensing: P-16 requires THIRD_PARTY_LICENSES.md to carry aGrUM 3.x's text. Agents: none exist yet (staffing has not run), so nobody to notify; when it does, M-probabilistic is a Prolog-adjacent niche surface that the model policy puts on opus. Tasks in flight: none.
+- Options: (A) Upgrade and expose all four families, split into separately shippable stories, one capability at a time behind the upgrade. (B) Upgrade only, deferring every new family: smallest change that gets off a superseded 2.x, and it still breaks two contracts and moves pinned results. (C) Upgrade and expose one family first -- KTBN is the strongest candidate for an embodied conversational agent, being dialogue state over time -- and treat the rest as follow-on requests once the migration has proven stable. (D) Don't change: stay on 2.3.2. Cost of (D): the project stays on a line upstream has left (3.0.0 shipped 18 July 2026), every later aGrUM fix and all four capability families stay unreachable, and the eventual migration grows; against that, 2.3.2 works today, 107-plus tests pass on it, and nothing is broken by waiting.
+- Changes: none
+
+Raised from REQ-004. The planner evaluated the upgrade half `requires-change` and the
+model-family half `needs-info`; the user has now answered the second with **all four**
+families, which makes this CR considerably larger than a version bump.
+
+**(a) The upgrade, 2.3.2 to 3.x.** 3.0.0 released 18 July 2026; the master changelog's
+top entry is 3.3.2, whose release date and stable status are unconfirmed, as is whether
+2.3.2 is the last 2.x. The CR must pick a target version, and it must **build before
+asserting a link list**: 3.1.0 merged BN with BNLEARNING, made PRM an independent module
+and added CM, so the static library target names change and are not confirmed upstream.
+
+The API breaks are mechanical and need porting, not deciding: `dag()`/`graph()` return
+value copies so callers use `internalDag()`/`internalGraph()`; `BNWriter::write()` takes
+a non-const reference; path functions return `std::optional`; `IDReader::proceed()`
+returns `Size`; `const std::string&` became `std::string_view`; `StructuralComparator`
+became `StructuralMetrics`; `Signaler1/2` became variadic; `DEFAULT_EPSILON` and friends
+moved into `gum::Configuration`.
+
+The **behaviour** changes are decisions, because they move results the tests pin:
+`ShaferShenoyLIMIDInference`'s optimal policy now keeps its decision parents; `MEU()`'s
+variance now includes covariances between utilities; `evidenceProbability()` previously
+ignored connected components without a target; and the aggregators (`min`, `max`,
+`median`, `amplitude`, `sum`) now work on values rather than parent indices, which
+changes results for ranges not starting at zero. Each needs a verdict on whether the new
+behaviour is the intended one, and the tests rewritten to pin it deliberately rather than
+adjusted until they pass.
+
+Reassuringly, nothing we call is renamed: `BayesNet`, `InfluenceDiagram`,
+`LazyPropagation`, `ShaferShenoyInference` and `ShaferShenoyLIMIDInference` keep their
+names, and `Potential` to `Tensor` was already done in the 2.x upgrade.
+
+**(b) Four capability surfaces, not one.** Causal reasoning and counterfactuals (the CM
+module: `CausalModel`, the do-calculus AST, `DoorCriteria` backdoor and frontdoor
+enumeration, ID/IDC identification, `CausalImpact::impact()`, counterfactual queries);
+dialogue state over time (KTBN k-order dynamic Bayesian networks, with filtering,
+smoothing and automatic order learning); imprecise probabilities (credal networks,
+`CredalNet`); and structure learned from interaction data (`PC`, `FCI` with `PAG`,
+`GreedyThickThinning`). These are not variants of each other and should land as separate
+stories behind the upgrade, not as one change.
+
+**The live design risk is NG-1 and P-08.** Each family must arrive as a component the
+application drives. "New ways of conducting decisions" is one step from a dialogue
+manager, and FANTASIA explicitly is not one: it may offer the machinery to decide, never
+the policy about when or what the agent says.
+
+**One judgement for the user, not for the planner.** The planner reads structure learning
+and KTBN order learning as *estimation* -- the same shape as the in-plugin SVM training
+US-015 already ships -- and therefore not the model training, hosting or weight shipping
+NG-4 denies. A stricter reading of NG-4 makes that fourth family a non-goal violation and
+removes it from the answer. Worth a moment, since the user chose all four.
+
+Needs the user's approval: breaking changes to two contracts, an amended ADR, and four
+new capability surfaces.
+
+## J-0047 | 2026-11-12 | CR-002 | lead
+- Event: approved
+- Decision: Approved by the user. Asked which way the demo should go, with this option described as 'recorded as managed separately; architecture.md stops implying ownership where it names the demo as the walking skeleton', the user chose it over bringing the demo in as a cross-repository module. The substance was therefore decided before the CR was raised; this records it.
+- Changes: none
+
+Option (A) of three. (B), a cross-repository module, was rejected because it would need a
+representation this architecture does not have: every module's paths are inside this tree
+and the checker resolves them against it, so a module pointing at another repository
+would be unverifiable by the one mechanical check the project has. (C), leaving
+architecture.md as it was, was rejected because it is the state that produced REQ-003's
+`requires-change` in the first place -- an architecture asserting a skeleton it cannot
+verify.
+
+## J-0048 | 2026-11-12 | ADR-0014 | lead
+- Status: accepted
+- Title: The demo project is maintained separately and owned by no module here
+- Changes: none
+
+### Context
+architecture.md's Walking skeleton section cited FANTASIA-LangGraphDemo as "that path
+wired up end to end", which made the demo load-bearing evidence for the skeleton. The
+demo is a separate repository at codeberg.org/antori/FANTASIA-LangGraphDemo. No module's
+paths cover it, no contract describes it, and P-02's one-owner rule left any story about
+it nowhere to land -- which is why REQ-003 could not be planned.
+
+### Decision
+The demo is maintained as its own project, in its own repository, owned by no module
+here, in the same arrangement as the project wiki. architecture.md cites it as an
+illustration and rests nothing on it. Work on the demo is routed to its own project and
+is not planned from this backlog.
+
+### Consequences
+The architecture now claims only what it owns, and the walking skeleton is verifiable
+from this repository alone -- every component in that path belongs to a module here.
+REQ-003 leaves this backlog with no story. The cost is that the demo can drift from the
+plugin without anything here noticing: it currently carries the 5.7 ACE plugins and
+James only, so it inherits US-020's 5.8 port dependency, and nothing in this repository
+will flag it when the plugin moves. Whoever maintains the demo owns that risk.
+
+### Alternatives
+A cross-repository module, with paths in another tree: rejected because the checker
+resolves module paths against this repository, so such a module could not be verified
+mechanically, and P-02 assumes a single tree. Leaving the citation as it stood: rejected
+as the status quo that made REQ-003 unplannable.
+
+## J-0049 | 2026-11-12 | CR-002 | lead
+- Event: implemented
+- Evidence: architecture.md's Walking skeleton section rewritten: the skeleton is stated to live entirely in this repository and to be verifiable from it alone, and the demo is cited as an illustration maintained as its own project, citing ADR-0014. Design version 1 -> 2. ADR-0014 logged. Checker and reflexion run after the change; no module, contract, story or test was touched, so nothing else needed updating. No agents exist yet (staffing has not run), so there was nobody to notify.
+- Changes: architecture.md
+
+## J-0050 | 2026-11-12 | CR-001 | lead
+- Event: approved
+- Decision: Approved by the user, option (A): the surface bar. A fix is minor on a shipped engine line when it touches no contract, no module boundary, no ADR and no dependency, changes no Blueprint-facing signature, and is estimated S or M. The user was shown, in the option itself, that this admits F-008 and excludes F-011, and chose it on that basis.
+- Changes: none
+
+Option (A) of four. (B), the same bar with a security carve-out, and (C), a risk-based
+bar, were both rejected; (D), no bar, was rejected as the status quo that makes the
+policy unenforceable.
+
+**What this costs, stated plainly because the wording would otherwise hide it.** F-011
+is excluded from the 5.8 line. Its fix changes C-neo4j, and the bar excludes anything
+that touches a contract. So for the life of the 5.8 line, a user who sets `UseSSL = true`
+against a `bolt://` endpoint connects in plaintext and sends their Neo4j password in the
+clear, and the plugin tells them nothing. That is a decision the user made with the
+consequence in front of them, not a side effect of the definition -- which was the whole
+reason the planner refused to write the definition without asking.
+
+F-008 is admitted: two missing `Config` UPROPERTY specifiers, no contract touched, and
+without it API keys are written into Blueprint and actor asset defaults that users commit.
+
+Two parts of this CR the user has not decided, which the lead is applying as stated
+assumptions rather than leaving the CR half-done. Either can be corrected by appending to
+this CR:
+
+- **The trigger for moving main to the next engine line**: a *released* engine, not a
+  preview, and only once the plugin builds clean and its tests pass against it. This is
+  the reading the request itself implies -- 5.8 is being shipped precisely because 5.9 is
+  only a preview -- and it keeps P-14 mechanical rather than a judgement each time.
+- **Where next-line work accumulates**: stories carry a `Target line:` field naming the
+  engine line they are for, defaulting to the shipped line. Without it, 5.9-targeted work
+  has nowhere to live and is lost, which was the fourth thing this CR had to settle.
+
+## J-0051 | 2026-11-12 | CR-003 | lead
+- Event: approved
+- Decision: Approved by the user, option (C): migrate to aGrUM 3.x and expose dialogue state over time (KTBN) first, as the family that most directly serves an embodied conversational agent. Causal reasoning and counterfactuals, credal networks and structure learning become follow-on requests once the migration has proven stable. Separately, the user confirmed the planner's reading of NG-4: fitting a graphical model to logged interactions is estimation, the same shape as the SVM training US-015 already ships, so structure learning stays admissible as a later family.
+- Changes: none
+
+Option (C) of four. (A), all four families at once, was rejected as sequencing risk, not
+on scope: the user still wants all four and said so. (B), upgrade with no new capability,
+was rejected because it pays the whole migration cost -- two broken contracts and moved
+results -- with nothing to show. (D), staying on 2.3.2, was rejected.
+
+So the approved scope is: the 3.x migration, then KTBN. The other three families are
+wanted and are not planned here; they arrive as their own requests.
+
+**The NG-4 reading is now settled and should be cited rather than re-argued.** Structure
+learning and KTBN order learning estimate a graphical model from data. NG-4 denies
+training, fine-tuning, hosting and shipping model weights. The user has confirmed the
+first is not the second, which also leaves US-015's existing in-plugin SVM training
+unquestioned.
+
+**What the apply step may and may not do now.** C-probabilistic and C-build are
+`Provenance: recovered` state documents: they describe aGrUM 2.3.2 because that is what
+is vendored today. They must not be rewritten to describe 3.x before the code is on 3.x,
+or they would describe a future. So this approval produces an ADR, the architecture's
+Decisions line, and stories; the contract rewrites and the version bumps happen when the
+migration lands, and this CR gets its `implemented` event then.
+
+**The migration's own hazard, for whoever plans it.** The target version is not settled
+upstream -- 3.0.0 shipped 18 July 2026, the changelog's top entry is 3.3.2, and the
+release dates and stable status of 3.1 to 3.3 are unconfirmed, as is whether 2.3.2 is the
+last 2.x. The static library target names change (3.1.0 merged BN with BNLEARNING, made
+PRM independent, added CM) and must be confirmed by building, never asserted into
+C-build. And four behaviour changes move results the tests pin: the LIMID optimal policy
+keeping decision parents, `MEU()`'s variance including covariances, `evidenceProbability()`
+no longer ignoring targetless components, and the aggregators working on values. Each
+needs a verdict that the new behaviour is the intended one, with the tests rewritten to
+pin it deliberately -- not adjusted until they pass.
+
+## J-0052 | 2026-11-12 | CR-001 | planner
+- Event: implemented
+- Evidence: principles.md: P-19 added (surface bar, applicable at intake, Enforced by planner+reviewer, Provenance stated) and P-14's statement amended to carry the released-engine trigger and the builds-clean-and-tests-pass condition. backlog.md: preamble documents the Target line convention and states F-011's exclusion from the 5.8 line with its consequence; Target line: 5.8 on US-020 and US-021; a Known defect line on US-014 pointing at F-011. No contract, module or test changed, so nothing else needed updating. Checker run after the change: 0 errors. No agents exist yet (staffing has not run), so there was nobody to notify.
+- Changes: principles.md, backlog.md
+
+P-19 is the new principle, in the Project principles section, applicable at intake and
+enforced by judgement like the rest of that section: planner and reviewer, not a checker
+and not a gate, because nothing here is mechanized. Its statement carries the surface bar
+as approved -- no contract, no module boundary, no ADR, no dependency; no Blueprint-facing
+signature; estimate S or M -- and adds the one clause the approved CR implies but does not
+spell out: bringing a line into being (the engine port, the prebuilt refresh) is the line's
+own work and is not measured by this bar. Without that clause P-19 would read as excluding
+US-020 (L) and US-021 from the 5.8 line, which the CR's own impact analysis says are
+unaffected. That wording is a judgement and can be corrected by appending here.
+
+P-14 now names the trigger in its statement rather than leaving it to be judged each time:
+main moves to the next engine line only on a released engine, never a preview, and only
+once the plugin builds clean against it and the suite passes on it. Its title changed with
+it (`Newest released engine on main`); nothing else in the state documents cites P-14 by
+title.
+
+The backlog's preamble documents the `Target line:` convention: a story may name the engine
+line it is for, a story without one targets the shipped line, and work for a line that has
+not shipped yet is logged with that line named so it is not lost. The field is on the
+stories where it carries information -- US-020 and US-021, both 5.8 -- and not on the
+sixteen recovered stories that simply describe what the plugin does.
+
+F-011's exclusion is recorded in three places outside the journal, none of them a new
+story. The backlog preamble states it in full, in front of whoever is choosing what to work
+on, with the consequence named: a plaintext password for the life of the 5.8 line. US-014
+carries a `Known defect:` line pointing at it. P-19's own rationale cites it as the live
+case, so the principle cannot be read without meeting its price. I deliberately did not
+open a story for the fix: F-011 is an open major finding, the status fold already carries
+it, and the fix's shape (remove the property, refuse to connect, or warn) is undecided, so
+a story would invent scope the user has not chosen.
+
+## J-0053 | 2026-11-12 | ADR-0015 | planner
+- Status: accepted
+- Amends: ADR-0009
+- Title: aGrUM moves to the 3.x line, with KTBN exposed first
+- Changes: none
+
+### Context
+FANTASIA vendors aGrUM 2.3.2 as per-module static libraries -- `agrumID`, `agrumBN`,
+`agrumBASE`, linked in that order (ADR-0009) -- and `M-probabilistic` is written against
+the 2.x API. Upstream has left that line: 3.0.0 released 18 July 2026 and the master
+changelog's top entry is 3.3.2. REQ-004 asked both for the upgrade and for new model
+families, and aGrUM 3.x makes four reachable from C++ that 2.3.2 does not: causal models
+with counterfactuals (the new `CM` module), k-order dynamic Bayesian networks (KTBN),
+credal networks, and structure learning. The user wants all four, and in CR-003 chose to
+migrate first and expose one family first.
+
+### Decision
+Migrate `M-probabilistic` and the aGrUM link surface to the 3.x line, and expose **KTBN --
+dialogue state over time** as the first new capability, as a Blueprint-facing component the
+application drives, never as a policy that decides what the agent says (NG-1, P-08).
+
+The target 3.x version **is not settled upstream and is fixed by building**, not by reading
+a changelog. 3.0.0's release date is known; the release dates and stable status of 3.1
+through 3.3.2 are not, nor is whether 2.3.2 is the last of the 2.x line. The version this
+project targets is the one that has been built with the suite green against it, and it is
+named in `C-build` and `C-probabilistic` only once that has happened.
+
+The static library target names and their link order are **confirmed by building and never
+asserted**. 3.1.0 merged BN with BNLEARNING, made PRM an independent module and added CM,
+so ADR-0009's `agrumID`/`agrumBN`/`agrumBASE` list cannot be carried across. The rule
+survives where the list does not: vendor only the modules FANTASIA uses, list each library
+before its dependency with the leaf last, and build them `/MD` without OpenMP.
+
+Four behaviour changes are decisions and not porting fallout, because they move results the
+tests pin. Each needs a recorded verdict that the new behaviour is the intended one, with
+the test rewritten to pin it deliberately rather than adjusted until it passes:
+`ShaferShenoyLIMIDInference`'s optimal policy keeping its decision parents; `MEU()`'s
+variance including covariances between utilities; `evidenceProbability()` no longer ignoring
+connected components without a target; and the aggregators working on values rather than
+parent indices.
+
+Causal models, credal networks and structure learning are wanted and arrive as their own
+requests, behind this migration. Structure learning and KTBN order learning estimate a
+graphical model from data, which is not the training, fine-tuning, hosting or weight
+shipping NG-4 denies -- it is the shape of the in-plugin SVM training US-015 already ships.
+That reading is settled with the user at J-0051 and is cited, not re-argued.
+
+This ADR **amends ADR-0009; it does not supersede it.** ADR-0009 is the decision behind the
+aGrUM 2.3.2 that is vendored today, and its link order is still a live invariant in both
+`C-probabilistic` and `C-build`. Superseding it now would leave two state documents citing
+a superseded decision for a rule still in force. It is superseded when the migration lands
+and those contracts are rewritten, in the same change; until then ADR-0009 describes the
+present and this ADR describes the direction, and architecture.md cites both.
+
+### Consequences
+The migration is not minor under P-19 -- it touches two contracts, a dependency and an ADR
+-- so it targets the 5.9 line and not the shipped 5.8 one. `C-probabilistic` is also the
+plugin's public Blueprint surface, so its version bump invalidates compiled Blueprint assets
+in user projects, which is a second reason it cannot ride a maintenance line.
+
+`C-probabilistic` and `C-build` are **not** rewritten by this decision. They are recovered
+documents describing what is vendored today; rewriting them to describe 3.x before the code
+moves would make them describe a future. They are rewritten, and their Versions bumped, when
+the migration lands -- which is also when CR-003 gets its `implemented` event and when
+ADR-0009 is superseded and dropped from architecture.md's Decisions.
+
+Two standing obligations come with it. P-16: THIRD_PARTY_LICENSES.md must carry aGrUM 3.x's
+upstream licence text. P-12: relinking changes the shipped DLL, so the prebuilt refresh and
+its dumpbin check apply when the migration lands on a branch users install from. F-005 is
+folded into the migration story rather than left behind it: every include line in
+`M-probabilistic` is being touched anyway, and the `WITH_AGRUM_BINDING` guard it ignores is
+in those files.
+
+Until the migration lands, the project stays on 2.3.2 and the three other families stay
+unreachable. Nothing is broken by waiting; the cost is that each later aGrUM fix stays out
+of reach and the migration grows.
+
+### Alternatives
+Upgrade and expose all four families at once: rejected as sequencing risk, not on scope --
+the user still wants all four. Upgrade only, deferring every family: rejected because it
+pays the whole migration cost, two broken contracts and moved results, with nothing to show.
+Stay on 2.3.2: rejected, upstream has left the line. Supersede ADR-0009 now rather than
+amend it: rejected for the reason above -- the supersession belongs to the landing, not to
+the planning.
+
+## J-0054 | 2026-11-12 | NOTE | planner
+- Subject: CR-003: the planning half applied; the CR stays approved
+- Changes: architecture.md, backlog.md
+
+**CR-003 stays `approved`, deliberately, and this NOTE is what records the half that
+landed.** The approval itself (J-0051) says the contract rewrites and the version bumps
+happen when the migration lands and that the CR gets its `implemented` event then. Logging
+`implemented` now -- even scoped to the planning artifacts -- would tell the status fold
+that CR-003 is done while two contract rewrites, two Version bumps and a supersession are
+still owed, and would contradict the approval entry a reader reaches first. So: approved,
+with this NOTE.
+
+**What landed.**
+
+- ADR-0015, accepted: aGrUM moves to the 3.x line with KTBN exposed first. It states that
+  the target 3.x version is unsettled upstream and is fixed by building, and that the
+  static library target names and link order are confirmed by building and never asserted.
+  It **amends ADR-0009 rather than superseding it**: ADR-0009 is the decision behind the
+  2.3.2 that is vendored today, and its ID/BN/BASE link order is still a live invariant in
+  both C-probabilistic and C-build, which may not be rewritten yet. A supersession now
+  would leave two state documents citing a superseded decision for a rule still in force.
+  ADR-0009 is superseded, and dropped from architecture.md's Decisions, in the same change
+  that rewrites those contracts.
+- architecture.md: a Decisions line citing ADR-0015 beside the ADR-0009 line it amends;
+  Design version 2 -> 3; US-022 and US-023 added to M-probabilistic's Satisfies and US-022
+  to M-dist's, since the link list is M-dist's.
+- backlog.md: US-022, the 3.x migration (`ready`, Must, Target line 5.9) and US-023, KTBN
+  (`draft`, Must, 5.9); plus the three deferred families as `draft` stories at Target line
+  5.9 -- US-024 causal reasoning and counterfactuals, US-025 credal networks, US-026
+  structure learning. The deferred three deliberately have no module: M-probabilistic's
+  responsibility is discrete probabilistic models and influence diagrams and does not
+  stretch to a causal model or a learner, so the placement belongs to each family's own
+  request. The checker's three "not satisfied by any module" warnings are that fact, not a
+  defect to silence.
+
+**What is pending, and where it is written down.** US-022's acceptance carries the
+obligations so they cannot be lost: the four behaviour changes each need a recorded verdict
+that the new behaviour is the intended one with the test rewritten to pin it deliberately;
+C-probabilistic and C-build are rewritten and their Versions bumped only once the port is
+green; THIRD_PARTY_LICENSES.md gets aGrUM 3.x's text (P-16); the prebuilt refresh and its
+dumpbin check apply (P-12). F-005 is folded in as an acceptance clause -- the honest call,
+since every include line in M-probabilistic is being touched and the ignored
+`WITH_AGRUM_BINDING` guard is in those files.
+
+**One consequence worth stating out loud.** Under P-19, applied earlier today from CR-001,
+the migration is not minor: it touches two contracts, a dependency and an ADR. So it cannot
+ride the shipped 5.8 line, and every story here carries `Target line: 5.9`. That follows
+from the two approvals rather than from a choice made here, but it is the first time the
+two have been put together.

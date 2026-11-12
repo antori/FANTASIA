@@ -1,6 +1,6 @@
 # Design principles
-- As of: J-0027
-- Approved: pending
+- As of: J-0052
+- Approved: yes
 
 ## Method principles
 
@@ -97,9 +97,9 @@ expensive mistakes take.
 - Provenance: recovered
 - Confidence: high
 
-### P-14: Newest engine on main, previous engine branched first
-- Statement: main carries the newest supported engine version. Before an engine switch, the outgoing version is branched under its version number and kept, so earlier lines stay downloadable without becoming development targets.
-- Rationale: Users are on a spread of engine versions and cannot all move at once, but maintaining several lines in parallel is beyond the project's capacity.
+### P-14: Newest released engine on main, previous engine branched first
+- Statement: main carries the newest supported engine version. main moves to the next engine line only when that engine has been released — never on a preview — and only once the plugin builds clean against it and the FANTASIATests suite passes on it. Before the switch, the outgoing version is branched under its version number and kept, so earlier lines stay downloadable without becoming development targets.
+- Rationale: Users are on a spread of engine versions and cannot all move at once, but maintaining several lines in parallel is beyond the project's capacity. The trigger is named rather than judged each time because a preview engine moves underneath the line, and a line nobody has built and tested is not a line users can be sent to.
 - Enforced by: user, planner
 - Provenance: stated
 
@@ -130,3 +130,9 @@ expensive mistakes take.
 - Enforced by: reviewer
 - Provenance: recovered
 - Confidence: high
+
+### P-19: A shipped engine line admits only minor fixes, and minor is measured by surface
+- Statement: Once an engine line ships it admits only minor fixes; everything larger targets the next line. A fix is minor when it touches no contract, no module boundary, no ADR and no dependency, changes no Blueprint-facing signature, and is estimated S or M. Every clause is decidable from the state documents, so a request is admitted or deferred at intake, before any code is written. Bringing the line into being — porting to the engine version, rebuilding the prebuilt binaries — is the line's own work and is not a fix against it; this bar does not measure it.
+- Rationale: A maintenance line with no stated bar admits everything, and "minor fixes only" becomes an intention with no mechanism to refuse anything. The bar is surface rather than risk so that it can be applied at intake without a severity judgement, and the price is explicit: a two-line fix that touches a contract waits for the next line however bad the defect behind it is. F-011 is the live case — its fix changes C-neo4j, so the 5.8 line does not admit it, and for the life of that line a user who sets `UseSSL = true` against a `bolt://` endpoint sends their Neo4j password in the clear with no warning.
+- Enforced by: planner, reviewer
+- Provenance: stated

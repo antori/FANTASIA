@@ -1,13 +1,33 @@
 # Product backlog
-- As of: J-0027
-- Approved: pending
+- As of: J-0054
+- Approved: yes
 
-Recovered at adoption from the FANTASIATests automation suite (the most reliable
-statement of current behaviour), the README feature inventory and the component
-headers. A story marked `done` describes what the system does today, bugs included;
-`Confidence: medium` means no test pins it yet and the first sprint owes it one. A
-`Tests:` path marked `[does not exist yet]` is where a characterisation test belongs and
-nothing verifies that story today; six of the nineteen are in that state.
+US-001 to US-019 were recovered at adoption from the FANTASIATests automation suite
+(the most reliable statement of current behaviour), the README feature inventory and the
+component headers; a story numbered above those comes from a request and names it on its
+`Source:` line. A story marked `done` describes what the system does today, bugs
+included; `Confidence: medium` means no test pins it yet and the first sprint owes it
+one. A `Tests:` path marked `[does not exist yet]` is where that story's test belongs — a
+characterisation test where the story is `done`, the acceptance test where the work has
+not been done — and nothing verifies the story today; ten of the test files named below do
+not exist.
+
+A story may carry a `Target line:` field naming the engine line it is for — the line whose
+branch the work lands on. A story without one targets the shipped line, which is the
+engine version the brief names (5.8 today). Work for a line that has not shipped yet is
+logged here with that line named, so that it has somewhere to live before the line exists
+instead of waiting unlogged. P-19 decides what the shipped line admits and sends
+everything larger to the next line, so a story's target line and its size are the same
+question asked twice.
+
+One consequence of P-19 is open, and belongs in front of whoever is choosing what to work
+on: **F-011 is excluded from the 5.8 line.** Any form of its fix — removing `UseSSL`,
+refusing to connect on a mismatch, or at minimum warning — changes C-neo4j, and the bar
+admits nothing that touches a contract. So for the life of the 5.8 line, a user who sets
+`UseSSL = true` against a `bolt://` endpoint connects in plaintext and is told nothing,
+and their Neo4j password crosses the network in the clear. The finding stays open and the
+fix waits for the 5.9 line. F-008, the other open major, is admitted: two missing `Config`
+specifiers, no contract touched.
 
 ### US-001: Transcribe recorded speech locally
 - Story: As a researcher, I want speech recognised on the machine without a cloud service, so that recordings with human participants never leave the lab.
@@ -171,6 +191,7 @@ nothing verifies that story today; six of the nineteen are in that state.
 - Status: done
 - Estimate: L
 - Acceptance: Given a Bolt endpoint, When the transport is Plain TCP (the default) or WebSocket, with or without TLS, Then handshake, authentication and query exchange succeed against both Aura and a local install; and Given a result set, Then each row exposes nodes, relationships and simple values as distinct cell types; and Given any PackStream value, Then encoding and decoding round-trips it exactly.
+- Known defect: F-011 — `BeginPlay` overwrites `UseSSL` from the endpoint scheme, so `UseSSL = true` against a `bolt://` endpoint connects in plaintext silently. The fix changes C-neo4j, so P-19 excludes it from the 5.8 line; it waits for 5.9.
 - Tests: FANTASIA/Source/FANTASIATests/Private/BoltPackStreamTests.cpp
 - Source: FANTASIA/Source/FANTASIA/Public/Neo4jComponent.h, BoltProtocol.h, BoltPackStream.h
 - Depends on: none
@@ -204,7 +225,7 @@ nothing verifies that story today; six of the nineteen are in that state.
 ### US-017: Animate a MetaHuman face from synthesized speech
 - Story: As a researcher, I want the agent's face driven by the speech it is producing, so that the character looks like it is talking.
 - Priority: Must
-- Status: done
+- Status: ready
 - Estimate: L
 - Acceptance: Given FANTASIAACE and NV_ACE_Reference enabled and an A2F provider configured, When speech is synthesized through an ACE TTS component, Then audio samples are streamed to Audio2Face and the resulting animation drives the face; and Given the turn ends with EndTurn set, Then the A2F session is closed so no audio bleeds into the next utterance; and Given FANTASIAACE is absent, Then core FANTASIA still synthesizes and plays audio.
 - Tests: FANTASIAACE/Source/FANTASIAACETests/Private/ACERESTTTSComponentTests.cpp [does not exist yet]
@@ -216,19 +237,19 @@ nothing verifies that story today; six of the nineteen are in that state.
 ### US-018: Install the whole stack with one command
 - Story: As a new user, I want one script to fetch everything a typical interactive MetaHuman needs and put it where it belongs, so that I can start from a clone and a single run.
 - Priority: Must
-- Status: done
+- Status: ready
 - Estimate: L
 - Acceptance: Given a clone placed inside a project's Plugins folder, When bootstrap runs with no arguments, Then the Whisper model, GPU stack, build-time libs and the NVIDIA ACE bundle plus sample characters are fetched from the release assets and the NVIDIA plugins are placed next to FANTASIA; and Given it is re-run, Then nothing is refetched and a summary is printed; and Given an opt-out flag, Then only that part is skipped.
 - Tests: FANTASIA/Source/FANTASIATests/Private/BootstrapContractTests.cpp [does not exist yet]
 - Source: FANTASIA/bootstrap.bat, FANTASIA/bootstrap.sh
-- Depends on: none
+- Depends on: US-020
 - Provenance: recovered
 - Confidence: medium
 
 ### US-019: Use the plugin without compiling anything
 - Story: As a Blueprint-only user, I want the plugin to work from the clone as it is, so that I never need Visual Studio or a C++ toolchain.
 - Priority: Must
-- Status: done
+- Status: ready
 - Estimate: M
 - Acceptance: Given the committed Win64 binaries and the engine version named in FANTASIA.uplugin, When the plugin is enabled in a Blueprint-only project, Then the editor loads it without reporting a different engine version, every component appears in the Blueprint palette, and no module requires a rebuild.
 - Tests: FANTASIA/Source/FANTASIATests/Private/BootstrapContractTests.cpp [does not exist yet]
@@ -236,6 +257,102 @@ nothing verifies that story today; six of the nineteen are in that state.
 - Depends on: US-018
 - Provenance: recovered
 - Confidence: medium
+
+### US-020: Re-port the NVIDIA ACE plugins to Unreal 5.8 and publish the bundles
+- Story: As a new user on the 5.8 line, I want the default install to bring the Audio2Face half with it as it did on 5.7, so that one command still gets me a lip-syncing MetaHuman instead of a failed download.
+- Priority: Must
+- Status: ready
+- Target line: 5.8
+- Estimate: L
+- Acceptance: Given NVIDIA's ACE source and Unreal 5.8, When NV_ACE_Reference and the Mark, James and Claire character plugins are rebuilt against it, Then each one's `.modules` BuildId equals the running engine's effective compatible changelist and the editor loads them without reporting a different engine version; and Given those builds packaged under the four asset names bootstrap.bat already requests for the 5.8 line — `nv-ace-reference-ue58-full.tar.gz` and `nv-audio2face-mark/james/claire-ue58.tar.gz` — When the release bootstrap points at is listed, Then every one of those names is present on it and a default run with no flags completes with no failed download; and Given the bundles are republished, Then THIRD_PARTY_LICENSES.md carries the upstream licence text of every module and model they ship.
+- Tests: FANTASIA/Source/FANTASIATests/Private/BootstrapContractTests.cpp [does not exist yet]
+- Source: REQ-001
+- Depends on: none
+- Provenance: stated
+- Confidence: high
+
+### US-021: Refresh the FANTASIAACE prebuilt binaries for Unreal 5.8
+- Story: As a Blueprint-only user on 5.8, I want FANTASIAACE to load from the clone the way the core plugin does, so that lip-sync is not the one component I am told was built with a different engine version.
+- Priority: Must
+- Status: ready
+- Target line: 5.8
+- Estimate: M
+- Acceptance: Given NV_ACE_Reference built for 5.8, When the FANTASIAACE Win64 Development and DebugGame binaries are rebuilt and committed as their own refresh commit, Then every committed FANTASIAACE `.modules` BuildId equals the core plugin's and the editor loads FANTASIAACE without reporting a different engine version; and Given dumpbin is run over the rebuilt DLLs, Then they import no library the plugin does not itself ship or stage.
+- Tests: FANTASIA/Source/FANTASIATests/Private/BootstrapContractTests.cpp [does not exist yet]
+- Source: REQ-001
+- Depends on: US-020
+- Provenance: stated
+- Confidence: high
+
+### US-022: Migrate the probabilistic stack to aGrUM 3.x
+- Story: As a researcher relying on FANTASIA's reasoning components, I want them built on the aGrUM line upstream actually maintains, so that the fixes and the model families arriving there reach me instead of stopping at a version nobody maintains.
+- Priority: Must
+- Status: ready
+- Target line: 5.9
+- Estimate: L
+- Acceptance: Given a candidate aGrUM 3.x release, When its modules are built on Win64 as static libraries `/MD` without OpenMP, Then the version adopted is the one that built, and its module target names and link order are recorded from that build and not from the changelog; and Given the ported module and tests, When the FANTASIATests suite runs, Then it passes in full, and each of the four behaviour changes that move a pinned result carries a recorded verdict that the new behaviour is the one this plugin wants, with the test rewritten to pin that behaviour deliberately — the LIMID optimal policy now keeping its decision parents, `MEU()`'s variance now including covariances between utilities, `evidenceProbability()` accounting for connected components that carry no target, and the aggregators now working on values rather than parent indices; and Given a build with `WITH_AGRUM_BINDING` defined to 0, When the module is compiled, Then either the binding is genuinely absent or the guard is gone, so no configuration is left in which the define claims to disable a binding it cannot (F-005); and Given the 3.x libraries are shipped or fetched, Then THIRD_PARTY_LICENSES.md carries their upstream licence text (P-16); and Given the port is green, Then C-probabilistic and C-build are rewritten to describe 3.x — the confirmed library targets and link order among them — with both Versions bumped, and the Win64 prebuilt binaries are rebuilt and dumpbin-verified before the change counts as delivered (P-12).
+- Tests: FANTASIA/Source/FANTASIATests/Private/BayesianNetworkTests.cpp; FANTASIA/Source/FANTASIATests/Private/InfluenceDiagTests.cpp
+- Source: CR-003 (ADR-0015)
+- Depends on: none
+- Provenance: stated
+- Confidence: medium
+- Open: the target 3.x version is unsettled upstream and is fixed by the first build, so the estimate is a guess until then. C-probabilistic is also the plugin's public Blueprint surface, so bumping its Version invalidates compiled Blueprint assets in user projects.
+
+### US-023: Reason about dialogue state over time
+- Story: As a researcher building a conversational agent, I want to reason over the last k turns as one dynamic Bayesian network, so that the agent can hold a belief about what is going on now without my hand-rolling the time dimension.
+- Priority: Must
+- Status: draft
+- Target line: 5.9
+- Estimate: L
+- Acceptance: Given a k-order dynamic network defined from Blueprints — variables, the memory order k, intra-slice and inter-slice arcs, and their CPTs — When evidence for a sequence of slices is supplied and inference runs, Then filtered and smoothed posteriors are returned per slice and per variable, and the result is deterministic for the same model and evidence; and Given logged observations and a request to learn the memory order, When learning runs, Then the estimated order is reported, the work happens off the game thread and completion is signalled on it; and Given the component in use, Then it decides nothing about turn-taking or about what the agent says — the application reads the posterior and chooses (NG-1, P-08); and Given a project with this component and no other configured, Then it works alone (NFR-004).
+- Tests: FANTASIA/Source/FANTASIATests/Private/DynamicBayesianNetworkTests.cpp [does not exist yet]
+- Source: CR-003 (ADR-0015)
+- Depends on: US-022
+- Provenance: stated
+- Confidence: medium
+- Open: draft until the component surface is designed — whether it extends C-probabilistic or arrives as its own contract is decided with the migration, and that choice decides whether user Blueprint assets are invalidated a second time.
+
+### US-024: Ask what would have happened instead
+- Story: As a researcher, I want to ask what would have followed had the agent acted differently, so that an interaction can be analysed causally and not only by correlation.
+- Priority: Could
+- Status: draft
+- Target line: 5.9
+- Estimate: L
+- Acceptance: Given a causal model over a network and an intervention, When an impact query runs, Then the identified estimand and the resulting distribution are returned, or the query is refused as unidentifiable with a logged reason rather than answered wrongly; and Given a counterfactual query over an observed case, Then the counterfactual distribution is returned under the same identification discipline; and Given the capability lands, Then it arrives as a component the application drives and not as a policy about what the agent says (NG-1, P-08).
+- Tests: FANTASIA/Source/FANTASIATests/Private/CausalModelTests.cpp [does not exist yet]
+- Source: CR-003 — a deferred family: wanted, and arriving as its own request
+- Depends on: US-022
+- Provenance: stated
+- Confidence: low
+- Open: no module satisfies this yet, deliberately. M-probabilistic's responsibility is discrete probabilistic models and influence diagrams and does not stretch to a causal model; the placement is part of this family's own request.
+
+### US-025: Decide under probabilities that are intervals
+- Story: As a researcher whose conditional tables are informed guesses, I want to reason with probability intervals rather than single numbers, so that the agent's uncertainty about its own model is visible instead of invented.
+- Priority: Could
+- Status: draft
+- Target line: 5.9
+- Estimate: L
+- Acceptance: Given a credal network defined from Blueprints with interval-valued conditional tables, When inference runs, Then lower and upper posterior bounds are returned per variable and the bounds contain the point posterior the equivalent precise network would give; and Given an inconsistent set of intervals, Then the model is rejected with a logged reason rather than silently normalised; and Given the capability lands, Then it arrives as a component the application drives (NG-1, P-08).
+- Tests: FANTASIA/Source/FANTASIATests/Private/CredalNetworkTests.cpp [does not exist yet]
+- Source: CR-003 — a deferred family: wanted, and arriving as its own request
+- Depends on: US-022
+- Provenance: stated
+- Confidence: low
+- Open: no module satisfies this yet, deliberately; the placement is part of this family's own request.
+
+### US-026: Learn the model's shape from logged interactions
+- Story: As a researcher with interaction logs, I want the structure of a network estimated from the data rather than authored by hand, so that a study can discover the dependencies it did not already assume.
+- Priority: Could
+- Status: draft
+- Target line: 5.9
+- Estimate: L
+- Acceptance: Given a labelled sample of observations, When structure learning runs, Then a network — or a partial ancestral graph where the algorithm returns one — is produced and is reproducible from the same sample and parameters; and Given the learned structure, Then it can be loaded into the existing network component and queried; and Given the learning runs, Then it happens off the game thread with completion signalled on it; and Given the capability lands, Then it ships no model weights and hosts nothing: it estimates a graphical model from the project's own data, which is the shape of the SVM training US-015 already ships and not the training, hosting or serving NG-4 denies (the reading is settled, not re-argued).
+- Tests: FANTASIA/Source/FANTASIATests/Private/StructureLearningTests.cpp [does not exist yet]
+- Source: CR-003 — a deferred family: wanted, and arriving as its own request
+- Depends on: US-022
+- Provenance: stated
+- Confidence: low
+- Open: no module satisfies this yet, deliberately. M-probabilistic's responsibility does not stretch to a learner; the placement is part of this family's own request.
 
 ### NFR-001: Latency — speech heard to transcript available
 - Priority: Must
