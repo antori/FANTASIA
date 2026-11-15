@@ -60,7 +60,7 @@ aside p.hint { color: var(--muted); }
 </header>
 <div id="stage"><canvas id="c"></canvas><div id="tip"></div></div>
 <aside id="info"><p class="hint">Click a node, or find one by ID or words. Drag to pan, scroll to zoom. The chips show and hide kinds; <em>history</em> shows implementation decisions and closed findings, change requests and sprints.</p></aside>
-<script type="application/json" id="graph">{"version": 1, "project": "FANTASIA", "counts": {"ADR": 17, "C": 12, "CR": 12, "DEC": 29, "F": 66, "G": 5, "M": 12, "NFR": 5, "NG": 4, "P": 19, "REQ": 4, "S": 2, "T": 2, "US": 34}, "kinds": {"ADR": "decision record", "C": "contract", "CR": "change request", "DEC": "implementation decision", "F": "finding", "G": "goal", "M": "module", "NFR": "quality scenario", "NG": "non-goal", "P": "principle", "REQ": "request", "S": "sprint", "T": "task", "US": "story"},
+<script type="application/json" id="graph">{"version": 1, "project": "FANTASIA", "counts": {"ADR": 17, "C": 12, "CR": 12, "DEC": 30, "F": 69, "G": 5, "M": 12, "NFR": 5, "NG": 4, "P": 19, "REQ": 4, "S": 2, "T": 2, "US": 34}, "kinds": {"ADR": "decision record", "C": "contract", "CR": "change request", "DEC": "implementation decision", "F": "finding", "G": "goal", "M": "module", "NFR": "quality scenario", "NG": "non-goal", "P": "principle", "REQ": "request", "S": "sprint", "T": "task", "US": "story"},
  "nodes": [
   {"id": "G-1", "kind": "G", "src": "docs/ateam/brief.md:41", "title": "Let researchers wire a full conversational pipeline — speech in, reasoning,"},
   {"id": "G-2", "kind": "G", "src": "docs/ateam/brief.md:44", "title": "Keep every capability an independent, opt-in component, so that what works for"},
@@ -219,6 +219,7 @@ aside p.hint { color: var(--muted); }
   {"entries": 1, "first": "J-0222", "id": "DEC-027", "kind": "DEC", "last": "J-0222", "src": "docs/ateam/HISTORY.md:6017", "title": "The NVIDIA ACE/Mark/James/Claire fetches become opt-in (--ace/--mark/--james/--claire/--characters/--nvidia) and sit behind a single NVIDIAAVAILABLE=0 gate in…"},
   {"entries": 1, "first": "J-0223", "id": "DEC-028", "kind": "DEC", "last": "J-0223", "src": "docs/ateam/HISTORY.md:6025", "title": "FANTASIAACE is marked not-available-for-5.8 in three places rather than deleted or left silent: its .uplugin declares EngineVersion 5.7.0 (truthful - its prebu…"},
   {"entries": 1, "first": "J-0224", "id": "DEC-029", "kind": "DEC", "last": "J-0224", "src": "docs/ateam/HISTORY.md:6033", "title": "The P-12 refresh does not delete the local CUDA whisper build output under FANTASIA/ThirdParty/whispercpp/build/."},
+  {"entries": 1, "first": "J-0226", "id": "DEC-030", "kind": "DEC", "last": "J-0226", "src": "docs/ateam/HISTORY.md:6056", "title": "The NVIDIA ACE stack is built and marked for UE 5.8: the three Audio2Face character plugins compile unchanged against 5.8, EngineVersion is 5.8.0 in all four s…"},
   {"category": "drift", "entries": 1, "first": "J-0014", "id": "F-001", "kind": "F", "last": "J-0014", "severity": "major", "src": "docs/ateam/HISTORY.md:360", "status": "open", "title": "FANTASIATypes.h is a cross-component shared header."},
   {"category": "drift", "entries": 1, "first": "J-0015", "id": "F-002", "kind": "F", "last": "J-0015", "severity": "major", "src": "docs/ateam/HISTORY.md:385", "status": "open", "title": "The build links the full gRPC stack with protobuf and abseil, adds three include paths for it, and defines WITHGRPCBINDING=1."},
   {"category": "drift", "entries": 1, "first": "J-0016", "id": "F-003", "kind": "F", "last": "J-0016", "severity": "major", "src": "docs/ateam/HISTORY.md:407", "status": "open", "title": "UACEElevenLabsTTSComponent derives from UACERESTTTSComponent, not from UElevenLabsTTSComponent, so it cannot inherit the ElevenLabs configuration and declares…"},
@@ -234,7 +235,7 @@ aside p.hint { color: var(--muted); }
   {"category": "quality", "entries": 1, "first": "J-0026", "id": "F-013", "kind": "F", "last": "J-0026", "severity": "minor", "src": "docs/ateam/HISTORY.md:651", "status": "open", "title": "The 5.8 line fetches ue58 assets and stages them in a directory called NVIDIA-UE57-Bundle/."},
   {"category": "bug", "entries": 1, "first": "J-0032", "id": "F-014", "kind": "F", "last": "J-0032", "severity": "major", "src": "docs/ateam/HISTORY.md:991", "status": "open", "title": "The 5.8 line's default install cannot complete."},
   {"category": "bug", "entries": 1, "first": "J-0033", "id": "F-015", "kind": "F", "last": "J-0033", "severity": "minor", "src": "docs/ateam/HISTORY.md:1018", "status": "open", "title": "The Linux bootstrap's GPU fetch names an asset that has never been published, so --no-gpu is effectively mandatory on Linux and the default run reports a faile…"},
-  {"category": "bug", "entries": 1, "first": "J-0034", "id": "F-016", "kind": "F", "last": "J-0034", "severity": "major", "src": "docs/ateam/HISTORY.md:1039", "status": "open", "title": "FANTASIAACE.uplugin on Development declares EngineVersion 5.8.0, and every committed FANTASIAACE binary is still the 5.7 build."},
+  {"category": "bug", "entries": 2, "first": "J-0034", "id": "F-016", "kind": "F", "last": "J-0227", "severity": "major", "src": "docs/ateam/HISTORY.md:1039", "status": "fixed", "title": "FANTASIAACE.uplugin on Development declares EngineVersion 5.8.0, and every committed FANTASIAACE binary is still the 5.7 build."},
   {"category": "bug", "entries": 2, "first": "J-0065", "id": "F-017", "kind": "F", "last": "J-0130", "severity": "minor", "src": "docs/ateam/HISTORY.md:2137", "status": "open", "title": "Found while characterising US-029."},
   {"category": "quality", "entries": 2, "first": "J-0066", "id": "F-018", "kind": "F", "last": "J-0145", "severity": "minor", "src": "docs/ateam/HISTORY.md:2148", "status": "open", "title": "The acceptance criterion conflicts with the same story's constraint that the file opens no audio device."},
   {"category": "quality", "entries": 1, "first": "J-0067", "id": "F-019", "kind": "F", "last": "J-0067", "severity": "minor", "src": "docs/ateam/HISTORY.md:2159", "status": "open", "title": "All three are pinned as they are by the FANTASIA.WhisperCapture tests (Resample.LoudestChannelWins, Rms.LongBufferStaysWithinOneThousandth)."},
@@ -284,7 +285,10 @@ aside p.hint { color: var(--muted); }
   {"category": "quality", "entries": 1, "first": "J-0217", "id": "F-063", "kind": "F", "last": "J-0217", "severity": "minor", "src": "docs/ateam/HISTORY.md:5969", "status": "open", "title": "C-neo4j Version 3 names F-011, F-012, F-048 and F-055 but omits F-056, F-057 and F-060 where its Invariants state the cap's guarantee, so the omission reads as…"},
   {"category": "quality", "entries": 1, "first": "J-0218", "id": "F-064", "kind": "F", "last": "J-0218", "severity": "minor", "src": "docs/ateam/HISTORY.md:5978", "status": "open", "title": "Private/Quality/Neo4jTransportQualityTests.cpp:113 asserts the tooltip Contains('again') under the label 'and that the key is set again afterwards', against a…"},
   {"category": "performance", "entries": 1, "first": "J-0219", "id": "F-065", "kind": "F", "last": "J-0219", "severity": "minor", "src": "docs/ateam/HISTORY.md:5987", "status": "open", "title": "Halves the worst-case map reserve for one changed expression."},
-  {"category": "performance", "entries": 1, "first": "J-0220", "id": "F-066", "kind": "F", "last": "J-0220", "severity": "minor", "src": "docs/ateam/HISTORY.md:5998", "status": "open", "title": "FANTASIA/Source/FANTASIA/CLAUDE.md states that every component doing I/O dispatches off the game thread; C-neo4j says only that queries do."}
+  {"category": "performance", "entries": 1, "first": "J-0220", "id": "F-066", "kind": "F", "last": "J-0220", "severity": "minor", "src": "docs/ateam/HISTORY.md:5998", "status": "open", "title": "FANTASIA/Source/FANTASIA/CLAUDE.md states that every component doing I/O dispatches off the game thread; C-neo4j says only that queries do."},
+  {"category": "quality", "entries": 1, "first": "J-0225", "id": "F-067", "kind": "F", "last": "J-0225", "severity": "minor", "src": "docs/ateam/HISTORY.md:6041", "status": "open", "title": "This is the 5.9 ACE port, pre-identified, and that is the value of filing it: next time the base will be known rather than discovered."},
+  {"category": "quality", "entries": 2, "first": "J-0228", "id": "F-068", "kind": "F", "last": "J-0230", "severity": "major", "src": "docs/ateam/HISTORY.md:6069", "status": "accepted", "title": "Three bundles as structured for 5.7 means roughly 4.5 GB of release assets carrying about 3.3 GB of pure duplication, and a 5.8 release of about 5.2 GB."},
+  {"category": "bug", "entries": 1, "first": "J-0229", "id": "F-069", "kind": "F", "last": "J-0229", "severity": "major", "src": "docs/ateam/HISTORY.md:6084", "status": "open", "title": "F-013 records the stale directory name as cosmetic."}
  ],
  "edges": [
   ["ADR-0014", "derives_from", "REQ-003"],
@@ -573,6 +577,7 @@ aside p.hint { color: var(--muted); }
   ["DEC-028", "mentions", "F-016"],
   ["DEC-029", "about", "M-dist"],
   ["DEC-029", "mentions", "P-12"],
+  ["DEC-030", "about", "M-dist"],
   ["F-001", "about", "M-core"],
   ["F-001", "about", "NFR-004"],
   ["F-002", "about", "M-dist"],
@@ -619,6 +624,7 @@ aside p.hint { color: var(--muted); }
   ["F-016", "about", "M-dist"],
   ["F-016", "about", "US-017"],
   ["F-016", "about", "US-019"],
+  ["F-016", "mentions", "DEC-030"],
   ["F-017", "about", "M-asr"],
   ["F-017", "about", "US-029"],
   ["F-018", "about", "M-asr"],
@@ -743,6 +749,12 @@ aside p.hint { color: var(--muted); }
   ["F-065", "mentions", "DEC-020"],
   ["F-066", "about", "M-neo4j"],
   ["F-066", "about", "US-031"],
+  ["F-067", "about", "M-ace"],
+  ["F-067", "about", "US-020"],
+  ["F-068", "about", "M-dist"],
+  ["F-068", "about", "US-020"],
+  ["F-069", "about", "M-dist"],
+  ["F-069", "about", "US-020"],
   ["M-ace", "consumes", "C-elevenlabs-protocol"],
   ["M-ace", "consumes", "C-fantasia-types"],
   ["M-ace", "consumes", "C-rest-tts"],

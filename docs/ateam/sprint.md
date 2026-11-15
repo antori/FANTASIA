@@ -13,9 +13,7 @@ so only one run proceeds at a time, and fails below its `-MinTests` floor of 134
 
 ### S-02: A Neo4j connection safe to point at a real server
 - Status: active
-- Goal: Close the two blocker findings that make the Bolt connection unsafe against a real
-  server — an unbounded message reader and a TLS path that authenticates nobody — so that
-  US-014 returns to `done` and the 5.8 ship stops waiting on them.
+- Goal: Close the two blocker findings that make the Bolt connection unsafe against a real server - an unbounded message reader (F-021) and a TLS path that authenticates nobody (F-020) - so that US-014 returns to done and the 5.8 ship stops waiting on them.
 - Budget: $160
 - Stories: US-030, US-031, US-034
 - Target line: 5.8 for all three

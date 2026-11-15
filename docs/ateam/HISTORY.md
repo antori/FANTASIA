@@ -6037,3 +6037,66 @@ Alternatives rejected: (1) remove the FANTASIAACE module from the .uplugin, whic
 - Changes: none
 
 Verification of the refresh: clean rebuild of FantasiaGateEditor Win64 Development and DebugGame (plugin Intermediate/Build, harness Intermediate/Build and harness Binaries deleted first, so neither run could report 'Target is up to date'), -MaxParallelActions=6 against this machine's 8 GB pagefile, both exit 0. dumpbin /dependents on all four module DLLs shows libswipl.dll as the only non-system, non-engine import; no whisper.dll, ggml*.dll, cudart/cublas or ACE import, and no delay-load section at all. Both .modules carry BuildId 55116800 (UE 5.8). no-ACE comes from the gate harness .uproject enabling FANTASIA only.
+
+## J-0225 | 2026-11-15 | F-067 | build-dev
+- Event: opened
+- Kind: quality
+- Severity: minor
+- Story: US-020
+- Module: M-ace
+- Repro: NV_ACE_Reference compiles on 5.8 with one line changed, but only because warnings-as-errors is off: the previous porter's '#if (UE_5_5_OR_LATER && !UE_5_7_OR_LATER)' makes IsSupportedTarget() false on 5.7+, which leaves bWarningsAsErrors unset. Ten deprecated call sites each warn that the project will no longer compile in the next release - nine in Source/ACERuntime/Private/SoundWaveConversion.cpp (lines 90, 92, 95, 104, 105, 110, 119, 210, 211; the FSoundWaveProxy to FSoundWaveData migration) and one in Source/OmniverseLiveLink/Private/OmniverseLiveLinkCommands.cpp:30 (FInputGesture to FInputChord).
+- Changes: none
+
+This is the 5.9 ACE port, pre-identified, and that is the value of filing it: next time the base will be known rather than discovered.
+
+Two planning consequences. The nine SoundWave sites sit in two functions in one file, so they are a contained single-sitting job rather than a sprawl. And anyone who 'tidies' the !UE_5_7_OR_LATER guard to re-enable warnings-as-errors on 5.8 turns a one-line port into these ten migrations - the guard looks like dead version cruft and is not.
+
+ACE's own code produced no other warnings; the C4458/C4668/C4701/C4005 noise in the build log belongs to the core plugin's svm.cpp and the bundled ggml.
+
+## J-0226 | 2026-11-15 | DEC-030 | build-dev
+- Module: M-dist
+- Decision: The NVIDIA ACE stack is built and marked for UE 5.8: the three Audio2Face character plugins compile unchanged against 5.8, EngineVersion is 5.8.0 in all four staged NVIDIA .uplugin files, and FANTASIAACE's prebuilt Win64 Development and DebugGame DLLs are rebuilt at BuildId 55116800.
+- Reason: UBT ignores a plugin's EngineVersion while the plugin sits under a project's Plugins/, so the 5.7.0 marking was silent there; installing the same plugins into Engine/Plugins/Marketplace/ does enforce it, and a 5.8 deployment done that way would have been refused. FANTASIAACE's 47537391 BuildId against the engine's 55116800 is what stopped the companion plugin loading on 5.8.
+- Changes: none
+
+Built from the FANTASIADevelopment host project against UE 5.8 with -MaxParallelActions=6; both configurations report Result: Succeeded. The characters needed no source change: their own IsSupportedTarget guard is #if (UE_5_5_OR_LATER && !UE_5_7_OR_LATER), so on 5.8 it only turns bWarningsAsErrors off, and they emitted no warnings anyway. dumpbin /dependents on UnrealEditor-FANTASIAACE.dll shows UnrealEditor-{ACECore,ACERuntime,Core,CoreUObject,Engine,FANTASIA}.dll and the CRT only. The core FANTASIA binaries the host build touched (the DebugGame pair) were restored byte-for-byte from a pre-build snapshot, so the verified no-ACE/no-CUDA artifacts are unchanged. bootstrap.bat's NVIDIA_AVAILABLE stays 0 and FANTASIAACE.uplugin keeps its 5.7-only marking until the ue58 bundles are published.
+
+## J-0227 | 2026-11-15 | F-016 | lead
+- Event: fixed
+- Evidence: FANTASIAACE/Binaries/Win64 now carries Development and DebugGame at BuildId 55116800, verified by reading both .modules files directly (was 47537391). Built in the 5.8 host project once NV_ACE_Reference existed for 5.8, which is why it could not be fixed before. dumpbin /dependents shows UnrealEditor-ACECore.dll, UnrealEditor-ACERuntime.dll, UnrealEditor-FANTASIA.dll plus engine and CRT - the two ACE modules and core FANTASIA, as the companion legitimately must, and no libswipl or whisper edge. DEC-030 (J-0226).
+- Changes: none
+
+## J-0228 | 2026-11-15 | F-068 | build-dev
+- Event: opened
+- Kind: quality
+- Severity: major
+- Story: US-020
+- Module: M-dist
+- Repro: 1.67 GB of each character plugin's 1.69 GB is byte-identical across Mark, James and Claire, verified by sha256 rather than by size: a2e.trt/{E5E4043F-...}/a2e_network.trt is 1,284,446,484 bytes with sha256 47e9697b... in all three and even under the same GUID, and a2f.trt/{per-char GUID}/data/network.trt is 401,830,164 bytes with sha256 cf1b2947... in all three. Only bs_skin_<Name>.npz, bs_tongue_<Name>.npz and model_data_<Name>.npz differ - about 17.4 MB per character.
+- Changes: none
+
+Three bundles as structured for 5.7 means roughly 4.5 GB of release assets carrying about 3.3 GB of pure duplication, and a 5.8 release of about 5.2 GB. Two further pressures: GitHub's per-asset limit is 2 GB and the 1.5 GB character bundles are already near it, and a user who wants one character downloads 1.5 GB where 1.6 GB once plus 20 MB would serve any number of them.
+
+The alternative needs no NVIDIA source change, which is what makes it worth considering: each character module resolves its models from its own plugin directory via IPluginManager::FindPlugin(UE_PLUGIN_NAME)->GetBaseDir(), so one shared asset (the a2e.trt directory plus the single a2f network.trt) plus three roughly 20 MB per-character assets works if bootstrap places the shared payload into each plugin directory. On NTFS hard links make the three placements free; a plain copy costs the same disk as today. Against it: more moving parts in bootstrap, and it diverges from how NVIDIA ships.
+
+Only bites if the full bundles are published; an overlay-only release makes it moot.
+
+## J-0229 | 2026-11-15 | F-069 | build-dev
+- Event: opened
+- Kind: bug
+- Severity: major
+- Story: US-020
+- Module: M-dist
+- Repro: bootstrap.bat:157 sets NV_DIR to %SCRIPT_DIR%NVIDIA-UE57-Bundle on the 5.8 line, while the assets it names are nv-*-ue58*.tar.gz (the header at lines 17-20 also says UE57). The already-present skip tests 'if exist %NV_DIR%\NV_ACE_Reference\NV_ACE_Reference.uplugin', so a machine that bootstrapped the 5.7 line and then the 5.8 line finds leftover 5.7 content in the same staging directory and silently skips the 5.8 download, leaving 5.7 ACE binaries against a 5.8 engine.
+- Changes: none
+
+F-013 records the stale directory name as cosmetic. It is not: the name collision makes the idempotence check answer for the wrong engine line, and the failure is silent - the user gets a successful bootstrap and an editor that refuses to load the plugin with the opaque BuildId message. Fix in the same commit that flips NVIDIA_AVAILABLE, since both touch the same block and neither should ship without the other.
+
+## J-0230 | 2026-11-15 | F-068 | lead
+- Event: accepted
+- Reason: The user chose to publish full bundles for 5.8 as for 5.7, with the duplication in front of them, so the three self-contained character bundles stand.
+- Changes: none
+
+Accepted with its cost stated: a roughly 5.2 GB release carrying about 3.3 GB of byte-identical model data, and three assets near GitHub's 2 GB per-asset limit. The shared-asset alternative is recorded in J-0228 and needs no NVIDIA source change, so it remains available if the limit is ever hit or a user complains about downloading 1.5 GB for one character.
+
+What the decision buys: the bundles stay self-contained and match how NVIDIA ships, bootstrap needs no placement logic beyond what it already has, and a 5.8 release does not introduce a new structure at the same time as a new engine line.
