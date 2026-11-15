@@ -1,9 +1,9 @@
 # C-asr: Local speech recognition
-- As of: J-0027
-- Version: 1
+- As of: J-0110
+- Version: 1.1
 - Provider: M-asr
 - Consumers: M-demo, M-tests
-- Tests: FANTASIA/Source/FANTASIATests/Private/WhisperBlueprintLibraryTests.cpp
+- Tests: FANTASIA/Source/FANTASIATests/Private/WhisperBlueprintLibraryTests.cpp; FANTASIA/Source/FANTASIATests/Private/WhisperCaptureComponentTests.cpp
 - Provenance: recovered
 
 ## Specification
@@ -81,8 +81,13 @@ Types (`WhisperTypes.h`):
   ADR-0011). Only the library's *presence* is checked: if it loads but the CUDA runtime
   does not resolve, `use_gpu` is passed through and no warning is logged, which the
   subsystem header says of itself.
-- `StartCapture()` returns false when the audio device cannot be opened, and also when
-  capture is already running.
+- `StartCapture()` returns false when capture is already running, leaving `IsCapturing()`
+  as it was (pinned by `Controls.StartCaptureWhileCapturing`). It also returns false when
+  the capture device cannot be opened — but no value of `AudioDeviceIndex` provokes that:
+  an index outside the enumerated range, negative or too large, logs a warning and opens
+  the system default. The failure path needs a machine that enumerates no input device,
+  or a stream that fails to open, so it is reachable in the field and not from a test
+  (F-018).
 - `GetSegment` with an out-of-range index returns a default-constructed segment.
 
 ## Invariants
@@ -96,15 +101,28 @@ Types (`WhisperTypes.h`):
   `StartTime <= EndTime`.
 - SRT and VTT timestamps carry hours correctly past one hour (pinned by
   `SRT.HourTimestamp`).
-- `AudioDeviceIndex` of -1 means the operating system's default input device.
+- `AudioDeviceIndex` defaults to -1 and means the operating system's default input
+  device; so does any index outside the enumerated range (pinned by
+  `Defaults.ContractInvariants`).
 - `bEnableHighPassFilter` and `bEnableNoiseGate` both default to **true**, so the audio
-  reaching recognition is filtered unless a caller turns them off.
+  reaching recognition is filtered unless a caller turns them off (pinned by
+  `Defaults.ContractInvariants`). The high-pass is documented in the header as Direct
+  Form II Transposed and implemented as Direct Form I, and `ResampleAndMixToMono` is
+  named and documented as mixing to mono but selects the loudest channel per tap, so two
+  channels of opposite sign are not summed (F-019; the loudest-channel rule is
+  intentional, the name and the header text are what is wrong). `ResampleAndMixToMono`
+  also reads one frame past its input when the carried phase lands within one float ulp
+  below the frame count, which at 4410-frame callbacks happens on every callback
+  (F-017). Both are pinned as they are, so each fix updates the test that pins it.
 - No network call is made by this module, ever. That is the point of it (G-4, US-001).
 - The subsystem holds the single model instance; concurrent transcription requests are
   serialised by it.
 - Four further public subsystem members are outside this contract because nothing in
   the repository calls them: `TranscribeSync`, `GetWhisperSampleRate()`,
   `LanguageToString` and `GetDefaultModelDirectory`.
-- `UWhisperCaptureComponent` and the backend dispatcher have no tests at adoption
-  (F-007). Every invariant above that no test name is cited for is read from the code,
-  not pinned.
+- `UWhisperCaptureComponent` is characterised by 25 tests (`WhisperCaptureComponentTests.cpp`,
+  US-029): its Config defaults, its device-free controls, and the resample, RMS,
+  high-pass and noise-gate steps. They pin what the code does today, defects included,
+  and they open no audio device, load no model and make no network call. The backend
+  dispatcher still has no tests (F-007), and every invariant above that no test name is
+  cited for is read from the code, not pinned.

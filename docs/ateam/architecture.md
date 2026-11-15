@@ -1,7 +1,7 @@
 # Architecture: FANTASIA
-- Design version: 3
+- Design version: 4
 - Status: approved
-- As of: J-0054
+- As of: J-0129
 - Approved: yes
 - Origin: adopted 2026-11-12
 
@@ -43,6 +43,8 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Whisper CPU inference is statically linked into the plugin module; linking a prebuilt CUDA whisper requires an explicit opt-in (ADR-0011).
 - One configurable OpenAI-compatible component replaces the provider-specific components (ADR-0012).
 - The live line targets Unreal 5.8; the outgoing engine version is branched and kept before each switch (ADR-0013).
+- The demo project is an illustration maintained as its own repository, owned by no module here, as the wiki is (ADR-0014).
+- Verification brings its own host project: the gate generates a minimal harness project outside this repository and reaches the plugin as an ordinary project plugin, by a directory junction into the harness's `Plugins/`, then asserts that the editor loaded the test module from the directory the run compiled into — so it needs an installed engine and nothing else (ADR-0017, amending ADR-0016).
 
 ## Modules
 
@@ -63,7 +65,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Turn audio — a file, a buffer or a live microphone — into timed text on the machine, on CPU or GPU.
 - Paths: FANTASIA/Source/FANTASIA/Public/WhisperTypes.h, FANTASIA/Source/FANTASIA/Public/WhisperSubsystem.h, FANTASIA/Source/FANTASIA/Public/WhisperCaptureComponent.h, FANTASIA/Source/FANTASIA/Public/WhisperBlueprintLibrary.h, FANTASIA/Source/FANTASIA/Private/WhisperBackend.h, FANTASIA/Source/FANTASIA/Private/WhisperBackend.cpp, FANTASIA/Source/FANTASIA/Private/WhisperSubsystem.cpp, FANTASIA/Source/FANTASIA/Private/WhisperCaptureComponent.cpp, FANTASIA/Source/FANTASIA/Private/WhisperBlueprintLibrary.cpp
 - Language: cpp
-- Satisfies: US-001, US-002, US-003, US-004, NFR-001, NFR-004
+- Satisfies: US-001, US-002, US-003, US-004, US-029, US-033, NFR-001, NFR-004
 - Depends on: M-dist
 - Provides: C-asr
 - Consumes: C-build
@@ -76,7 +78,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Turn text into audio through an HTTP service and play it back in request order as it streams, with ElevenLabs as the shipped implementation.
 - Paths: FANTASIA/Source/FANTASIA/Public/RESTTTSComponent.h, FANTASIA/Source/FANTASIA/Private/RESTTTSComponent.cpp, FANTASIA/Source/FANTASIA/Public/ElevenLabsTTSComponent.h, FANTASIA/Source/FANTASIA/Private/ElevenLabsTTSComponent.cpp, FANTASIA/Source/FANTASIA/Public/ElevenLabsProtocol.h, FANTASIA/Source/FANTASIA/Private/ElevenLabsProtocol.cpp
 - Language: cpp
-- Satisfies: US-005, US-006, US-007, NFR-002, NFR-004
+- Satisfies: US-005, US-006, US-007, US-028, NFR-002, NFR-004
 - Depends on: M-core
 - Provides: C-rest-tts, C-elevenlabs-protocol
 - Consumes: C-fantasia-types
@@ -89,7 +91,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Reach a language model or an agent graph over HTTP and deliver its answer, streaming or whole.
 - Paths: FANTASIA/Source/FANTASIA/Public/OpenAICompatibleComponent.h, FANTASIA/Source/FANTASIA/Private/OpenAICompatibleComponent.cpp, FANTASIA/Source/FANTASIA/Public/LangGraphComponent.h, FANTASIA/Source/FANTASIA/Private/LangGraphComponent.cpp
 - Language: cpp
-- Satisfies: US-008, US-009, NFR-004
+- Satisfies: US-008, US-009, US-028, NFR-004
 - Depends on: M-core
 - Provides: C-llm
 - Consumes: C-fantasia-types
@@ -141,7 +143,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Speak Bolt to a Neo4j server over the configured transport and return Cypher results as typed rows.
 - Paths: FANTASIA/Source/FANTASIA/Public/Neo4jComponent.h, FANTASIA/Source/FANTASIA/Private/Neo4jComponent.cpp, FANTASIA/Source/FANTASIA/Public/BoltProtocol.h, FANTASIA/Source/FANTASIA/Private/BoltProtocol.cpp, FANTASIA/Source/FANTASIA/Public/BoltPackStream.h, FANTASIA/Source/FANTASIA/Private/BoltPackStream.cpp
 - Language: cpp
-- Satisfies: US-014, NFR-004
+- Satisfies: US-014, US-030, US-031, US-032, NFR-004
 - Depends on: M-core
 - Provides: C-neo4j
 - Consumes: C-fantasia-types
@@ -177,10 +179,10 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Confidence: high
 
 ### M-tests: Automation test suite
-- Responsibility: Pin current behaviour through the engine's automation framework, as the project's only mechanical verification, and observe component independence.
+- Responsibility: Pin current behaviour through the engine's automation framework, as the project's only mechanical verification, and observe component independence. It satisfies only the stories whose deliverable *is* a test: a story about behaviour belongs to the module that behaves, and NFR-004 is observed here without being satisfied here.
 - Paths: FANTASIA/Source/FANTASIATests/Public/, FANTASIA/Source/FANTASIATests/Private/
 - Language: cpp
-- Satisfies: none
+- Satisfies: US-028, US-029, US-030, US-031, US-032, US-033
 - Depends on: M-core, M-asr, M-tts, M-llm, M-prolog, M-probabilistic, M-ml, M-neo4j, M-dist
 - Provides: none
 - Consumes: C-fantasia-types, C-asr, C-rest-tts, C-elevenlabs-protocol, C-llm, C-prolog, C-probabilistic, C-math, C-neo4j, C-build
@@ -191,9 +193,9 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 
 ### M-dist: Build, bootstrap and distribution
 - Responsibility: Decide how the plugins are compiled, linked, staged and installed, and how a user gets from a clone to a running plugin.
-- Paths: FANTASIA/Source/FANTASIA/FANTASIA.Build.cs, FANTASIA/Source/FANTASIATests/FANTASIATests.Build.cs, FANTASIAACE/Source/FANTASIAACE/FANTASIAACE.Build.cs, FANTASIA/FANTASIA.uplugin, FANTASIAACE/FANTASIAACE.uplugin, FANTASIA/bootstrap.bat, FANTASIA/bootstrap.sh, FANTASIA/build_whisper_cuda.bat, FANTASIA/build_whisper_cuda.sh, FANTASIA/setup_whisper.bat, FANTASIA/setup_whisper.ps1, FANTASIA/setup_whisper.sh, FANTASIA/enable-plugins.ps1, FANTASIA/Binaries/, FANTASIAACE/Binaries/, README.md, THIRD_PARTY_LICENSES.md, LICENSE, .gitignore, .gitattributes
+- Paths: FANTASIA/Source/FANTASIA/FANTASIA.Build.cs, FANTASIA/Source/FANTASIATests/FANTASIATests.Build.cs, FANTASIAACE/Source/FANTASIAACE/FANTASIAACE.Build.cs, FANTASIA/FANTASIA.uplugin, FANTASIAACE/FANTASIAACE.uplugin, FANTASIA/bootstrap.bat, FANTASIA/bootstrap.sh, FANTASIA/build_whisper_cuda.bat, FANTASIA/build_whisper_cuda.sh, FANTASIA/setup_whisper.bat, FANTASIA/setup_whisper.ps1, FANTASIA/setup_whisper.sh, FANTASIA/enable-plugins.ps1, FANTASIA/run-tests.ps1, FANTASIA/Binaries/, FANTASIAACE/Binaries/, README.md, THIRD_PARTY_LICENSES.md, LICENSE, .gitignore, .gitattributes
 - Language: csharp
-- Satisfies: US-018, US-019, US-020, US-021, US-022, NFR-005
+- Satisfies: US-018, US-019, US-020, US-021, US-022, US-027, NFR-005
 - Depends on: none
 - Provides: C-build, C-install
 - Consumes: none

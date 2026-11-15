@@ -5,11 +5,11 @@ FANTASIAACE/Intermediate/
 # Debug symbols (large, not needed for plugin users)
 *.pdb
 
-# Whisper models — fetched by bootstrap.{bat,sh} from the runtime-v2.0
+# Whisper models — fetched by bootstrap.{bat,sh} from the runtime-v3.0
 # release. Never tracked, since they're huge and live in release assets.
 FANTASIA/Resources/ggml-*.bin
 
-# GPU whisper stack — fetched by bootstrap.{bat,sh} from the runtime-v2.0
+# GPU whisper stack — fetched by bootstrap.{bat,sh} from the runtime-v3.0
 # release. ~540 MB of CUDA-built DLLs that would otherwise dominate every
 # clone's LFS payload. The CPU path is statically linked into
 # UnrealEditor-FANTASIA.dll and needs none of these.
@@ -28,16 +28,19 @@ FANTASIA/Binaries/Linux/libcublas.so*
 FANTASIA/Binaries/Linux/libcublasLt.so*
 
 # Win64 build-time static libs — fetched by bootstrap.{bat,sh} from the
-# runtime-v2.0 release. ~330 MB uncompressed of aGrUM + gRPC + OpenSSL
+# runtime-v3.0 release. ~420 MB uncompressed of aGrUM + gRPC + OpenSSL
 # Win64 static libs needed at plugin compile time, not at runtime.
 # Blueprint-only users don't strictly need them but bootstrap fetches
 # them by default; the cost is disk space, not LFS bandwidth.
-FANTASIA/ThirdParty/aGrUM/Libraries/agrum.x64.lib
+# Each entry ignores the whole library directory, so a version bump that
+# renames the libs (as aGrUM 2.x's per-module split did) can't leak them
+# into a commit as LFS objects.
+FANTASIA/ThirdParty/aGrUM/Libraries/
 FANTASIA/ThirdParty/grpc/lib/win64/Release/
 FANTASIA/ThirdParty/OpenSSL/1.1.1t/lib/Win64/VS2015/Release/
 
 # NVIDIA ACE/Mark/James 5.7 bundles — fetched by bootstrap.bat from the
-# runtime-v2.0 release into this staging dir, then moved by the user into
+# runtime-v3.0 release into this staging dir, then moved by the user into
 # their project's Plugins/ folder. Never tracked (they're NVIDIA plugins).
 FANTASIA/NVIDIA-UE57-Bundle/
 FANTASIA/ACE-UE57-Bundle/

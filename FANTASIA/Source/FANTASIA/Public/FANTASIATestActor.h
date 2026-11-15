@@ -2,8 +2,9 @@
  * @file FANTASIATestActor.h
  * @brief Blueprint-friendly test actor that exercises every FANTASIA component.
  *
- * Drop this actor into any level, configure credentials in the Details panel,
- * and call RunAllTests (or individual Test* functions) from Blueprint.
+ * Drop this actor into any level, put the credentials it needs in the host project's
+ * DefaultGame.ini (typing them into the Details panel saves them into the level or
+ * Blueprint asset), and call RunAllTests (or individual Test* functions) from Blueprint.
  * Results appear as on-screen messages and are broadcast via OnTestCompleted.
  */
 
@@ -30,7 +31,7 @@ class UKernelDensityEstimator;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnFANTASIATestCompleted, FString, TestName, bool, bSuccess, FString, Message);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnFANTASIAAllTestsCompleted, int32, Passed, int32, Failed);
 
-UCLASS(Blueprintable, meta = (DisplayName = "FANTASIA Test Actor"))
+UCLASS(Blueprintable, Config = Game, meta = (DisplayName = "FANTASIA Test Actor"))
 class FANTASIA_API AFANTASIATestActor : public AActor
 {
 	GENERATED_BODY()
@@ -89,8 +90,18 @@ public:
 		meta = (EditCondition = "LLMProvider == ELLMProvider::Custom"))
 	bool bLLMCustomRequiresAuth = true;
 
-	/** API key for the selected provider (leave blank for providers that don't require auth, e.g. Ollama). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FANTASIA Tests|LLM")
+	/**
+	 * @brief API key for the selected provider (leave blank for providers that don't
+	 *        require auth, e.g. Ollama).
+	 *
+	 * Read from the host project's `DefaultGame.ini` and should be set there. A key
+	 * typed into the Details panel is still saved into the Blueprint or level asset:
+	 * this specifier adds an ini source, it does not make the property transient.
+	 *
+	 * @note  An asset that already holds a key still holds it. Clear the value in the
+	 *        asset and re-save it for the key to leave the asset.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FANTASIA Tests|LLM", Config)
 	FString LLMAPIKey;
 
 	/** Model to use. Leave blank to keep the preset default. */
@@ -106,7 +117,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FANTASIA Tests|Neo4j")
 	FString Neo4jUser = TEXT("neo4j");
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FANTASIA Tests|Neo4j")
+	/**
+	 * @brief Password for the Neo4j user above.
+	 *
+	 * Read from the host project's `DefaultGame.ini` and should be set there. A password
+	 * typed into the Details panel is still saved into the Blueprint or level asset:
+	 * this specifier adds an ini source, it does not make the property transient.
+	 *
+	 * @note  An asset that already holds a password still holds it. Clear the value in
+	 *        the asset and re-save it for the password to leave the asset.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FANTASIA Tests|Neo4j", Config)
 	FString Neo4jPassword;
 
 	/** Database to query. Leave blank to use the server's default ('neo4j' on most installations). */
@@ -119,8 +140,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FANTASIA Tests|TTS")
 	FString TTSBody;
 
-	/** ElevenLabs API key. Leave blank to skip the ElevenLabs test. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FANTASIA Tests|ElevenLabs")
+	/**
+	 * @brief ElevenLabs API key. Leave blank to skip the ElevenLabs test.
+	 *
+	 * Read from the host project's `DefaultGame.ini` and should be set there. A key
+	 * typed into the Details panel is still saved into the Blueprint or level asset:
+	 * this specifier adds an ini source, it does not make the property transient.
+	 *
+	 * @note  An asset that already holds a key still holds it. Clear the value in the
+	 *        asset and re-save it for the key to leave the asset.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FANTASIA Tests|ElevenLabs", Config)
 	FString ElevenLabsKey;
 
 	/** ElevenLabs voice ID to use (e.g. "21m00Tcm4TlvDq8ikWAM" for Rachel). */

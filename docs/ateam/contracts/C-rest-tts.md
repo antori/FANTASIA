@@ -1,9 +1,9 @@
 # C-rest-tts: Streaming speech synthesis over HTTP
-- As of: J-0027
-- Version: 1
+- As of: J-0110
+- Version: 1.1
 - Provider: M-tts
 - Consumers: M-ace, M-demo, M-tests
-- Tests: FANTASIA/Source/FANTASIATests/Private/Pcm16StreamDecoderTests.cpp
+- Tests: FANTASIA/Source/FANTASIATests/Private/Pcm16StreamDecoderTests.cpp; FANTASIA/Source/FANTASIATests/Private/SecretConfigTests.cpp
 - Provenance: recovered
 
 ## Specification
@@ -22,8 +22,9 @@ consumer, and the only one in the repository is in M-ace (F-009).
 `URESTTTSComponent : UActorComponent` — the generic base:
 
 - Configuration: `SampleRate` (default 16000), `bStreaming` (default false), `URL`
-  (Config), `BodyTemplate` (Config), and `Headers`, a string map that is **not** marked
-  Config even though it is where an API key goes (F-008)
+  (Config), `BodyTemplate` (Config), and `Headers` (Config), the string map an API key
+  goes into — an `xi-api-key` entry, typically — which loads from the host project's
+  `DefaultGame.ini` (F-008, fixed)
 - Events: `SynthesisReady(FString id)`, `PartialSynthesisReady(FString id)`,
   `PlaybackComplete(FString id)`
 - Calls: `TTSSynthesize(FString text, FString id, bool bEndTurn = false)`,
@@ -83,8 +84,14 @@ overrides none gets synthesis and buffering and no playback behaviour.
   by linear interpolation when it is at another rate; `SampleRate` is the assumed input
   rate for a headerless stream only, and `TTSGetSound` hard-codes 16 kHz regardless.
 - Word and character timing is captured but not exposed here (ADR-0010).
-- `Headers` and `Key` are Config UPROPERTYs. No key is ever defaulted to a real value
-  or logged (P-15).
+- `Headers` and `Key` are Config UPROPERTYs, so a key set in `DefaultGame.ini` reaches
+  the instance from the CDO without being serialised into any asset. No key is ever
+  defaulted to a real value or logged (P-15). `Config` adds that source and nothing
+  more: both stay `EditAnywhere, BlueprintReadWrite` and neither is transient, so a key
+  **typed into the Details panel** is still saved into the Blueprint or level asset
+  (F-031, open; pinned by `FANTASIA.Quality.Secrets.Asset.TypedKeyIsSerialized`), and
+  an asset that already holds one keeps it until the value is cleared and the asset
+  re-saved. The `Headers` tooltip states this.
 - The ElevenLabs configuration surface listed above is duplicated verbatim in
   `UACEElevenLabsTTSComponent` and kept in step by hand. That is a recorded defect
   (F-003); until it is fixed, a change to any of those ten properties is a change to

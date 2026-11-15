@@ -1,6 +1,6 @@
 # C-neo4j: Cypher queries over the Bolt protocol
-- As of: J-0027
-- Version: 1
+- As of: J-0108
+- Version: 2
 - Provider: M-neo4j
 - Consumers: M-demo, M-tests
 - Tests: FANTASIA/Source/FANTASIATests/Private/BoltPackStreamTests.cpp
@@ -52,8 +52,17 @@ above *is* exported, which is why it has 36 tests and this has none.
 - A Cypher error comes back as a Bolt FAILURE message and is logged; `FNeo4jResponse`
   arrives with no rows rather than with an error field.
 - `PopMessage` returns false when no complete message has accumulated.
-- `ReadValue` past the end of the buffer returns a null value; `HasMore()` is the
-  caller's guard (pinned by `Reader.HasMoreEmpty`).
+- **`ReadValue` does not bound its reads against the buffer.** `ReadByte` indexes
+  `Data.GetData()[Cursor++]` and the multi-byte readers index `Data.GetData() + Cursor`,
+  none of them comparing against `Data.Num()`; a string, byte, list or map length taken
+  from the message is used as given. So `ReadValue` on an empty buffer reads through a
+  null pointer, and a five-byte message `{0xD2, 0x7F, 0xFF, 0xFF, 0xFF}` asks for a 2 GB
+  string from it. `HasMore()` tells a caller whether a byte remains and is the only guard
+  there is; it does not make a malformed message safe, and a caller cannot make one safe
+  from outside. Callers must therefore treat this reader as trusting its input entirely
+  (F-021). This is a defect, not a design: it is admitted to the 5.8 line by P-19's
+  security carve-out and carried by US-030, and this sentence is rewritten when the
+  bounds checks land.
 - An unknown PackStream marker yields a null value rather than throwing.
 
 ## Invariants

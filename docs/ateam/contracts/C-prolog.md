@@ -1,6 +1,6 @@
 # C-prolog: Embedded Prolog reasoning
-- As of: J-0027
-- Version: 1
+- As of: J-0108
+- Version: 2
 - Provider: M-prolog
 - Consumers: M-demo, M-tests
 - Tests: FANTASIA/Source/FANTASIATests/Private/SWIPrologHelpersTests.cpp
@@ -36,7 +36,8 @@ objects themselves live in C-fantasia-types.
 - `MakeList(const TArray<USWIPrologTerm*>& Elements) -> USWIPrologList*`
 
 `SWIPrologThread.h` declares the worker that owns the engine. It is public only because
-the component holds one; applications do not use it directly.
+the component holds a pointer to it; applications do not use it directly. There is one
+instance per process, not one per component — see the invariants.
 
 ## Errors
 
@@ -52,8 +53,20 @@ the component holds one; applications do not use it directly.
 
 ## Invariants
 
-- One Prolog engine per component, running on its own thread. SWI-Prolog is not
-  re-entrant, so queries are serialised in submission order.
+- **One Prolog engine per process, shared by every component.** `SWIPrologThread` is a
+  file-scope singleton and `setup()` returns the same instance to every caller, so the
+  engine, the knowledge base, the single open query and the result events are shared.
+  SWI-Prolog is not re-entrant and one engine is the right design; what follows from
+  sharing it is not, and an integrator has to plan for it (F-028):
+  every component receives every other component's `SolutionAvailable`,
+  `AllSolutionsReady` and `QueryFailed` events, with the other's bindings, because the
+  subscription and `currentSolution` both live on the shared object and nothing filters
+  by subscriber; an `SWIPLassert` or `SWIPLretract` from any component changes what every
+  other component proves; two components interleaving `SWIPLsubmitQuery` and
+  `nextSolution()` drive the same open query; and `Shutdown()` is called from nowhere, so
+  clauses asserted in one PIE session are still asserted in the next and for the
+  editor's lifetime. Queries are serialised in submission order across all components,
+  not per component.
 - Queries are submitted from the game thread and solutions are broadcast on the game
   thread; the engine never runs on the game thread.
 - `SWIPLsubmitQuery` is iterative: solutions arrive one at a time through

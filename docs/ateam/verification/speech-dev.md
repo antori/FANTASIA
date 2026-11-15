@@ -4,7 +4,36 @@
 - Language: cpp
 - Reviewer: reviewer
 - Tester: tester
-- As of: J-0055
+- As of: J-0059
+## This sprint (S-01)
+
+Two tasks, both deliberately tiny, in two different modules:
+
+**T-05 (US-028, M-tts)** — add the `Config` specifier to `URESTTTSComponent::Headers` and
+say in its doc comment where the value now comes from. This is F-008's second half, and
+`Headers` is exactly where an `xi-api-key` goes, between `URL` and `BodyTemplate`, which
+both carry `Config` already. Examined hardest:
+
+1. **A `TMap` is not a string.** `Config` on a map property is not as obvious as on the
+   two properties either side of it, so the doc comment must show a user how the entries
+   are written in `DefaultGame.ini`, and T-03's test must prove a real reload puts them on
+   the instance. Do not assume it works because the neighbours do — that assumption is
+   what F-008 is.
+2. **The specifier alone is not the fix.** An asset that already holds a key keeps it
+   until it is re-saved; the doc comment says so, because it is the tooltip the user reads.
+3. **Nothing else in the header moved**: same name, type, category and `EditAnywhere,
+   BlueprintReadWrite` specifiers, which is the P-19 clause that admits this at all.
+4. **P-07, hard.** F-009 and F-003 are both in this owner's paths and both change
+   contracts. Not this sprint, not while passing through.
+
+**T-06 (US-029, M-asr)** — add one `friend` declaration to `WhisperCaptureComponent.h` so
+that T-07 can characterise the private audio front end. Examined hardest: that it is one
+declaration and nothing else — no member moved from private to public, no helper extracted,
+no signature changed, so no exported surface and no part of C-asr changes. The seam exists
+because the behaviour worth pinning (the resampler, the RMS, the high-pass coefficients,
+the noise gate) is private, and widening the real surface to reach it would be a contract
+change P-19 keeps off this line.
+
 ## Reviewer checklist
 
 - Contracts provided: **C-asr** — a failed transcription is reported through `FWhisperResult` (`bSuccess` false, `ErrorMessage` set), never an exception; a failed model load fires `OnModelLoaded(false)`; a GPU backend that is absent falls back to CPU with a warning, and a CUDA runtime that fails to *resolve* is not detected at all. **C-rest-tts** — this is the project's only subclassing agreement: five virtuals (`BuildSynthesisRequest`, `ProcessResponse`, `WakeConsumer`, `CreateStreamDecoder`, `EndTurn`) plus protected buffer state. **C-elevenlabs-protocol** — every function static and stateless; the stream decoder is caller-owned and not thread-safe. **C-ace-tts** — end of turn is mandatory, not optional as in the base class.
@@ -19,7 +48,7 @@
 ## Tester plan
 
 - Unit: the PCM16 decoder on an odd trailing byte, an empty feed, and a chunk boundary mid-sample; the ElevenLabs stream decoder on a server-sent line split across reads and on one that never completes; `WordsFromCharacters` on empty input, a single character, runs of spaces, a trailing space, and an accented glyph (the implementation flags that last one as unresolved); `ApplyPronunciations` for a key inside a longer word, which must *not* be replaced; the subtitle formatters past one hour; `ParseModelFileName` on a name that does not match the convention. Then the untested surface F-007 names: VAD segmentation at the silence threshold, the noise gate's attack and release, buffer clearing mid-capture, `StartCapture` when already capturing, and device index -1 against a machine with no input device.
-- Security surface: `docs/ateam/threat-model.md` § M-asr, M-tts, M-ace — the security engineer fills it. In outline: the `Key` and `Headers` paths and where they are written (F-008); a TTS endpoint and body template taken from configuration, so a URL and a request body are both caller-controlled; audio file paths from Blueprint; and the model file path, which is read from disk at `LoadModel`.
+- Security surface: `docs/ateam/threat-model.md` § M-asr, M-tts, M-ace — the security engineer writes it in T-01, this sprint, and reviews T-05 against it. In outline: the `Key` and `Headers` paths and where they are written (F-008); a TTS endpoint and body template taken from configuration, so a URL and a request body are both caller-controlled; audio file paths from Blueprint; and the model file path, which is read from disk at `LoadModel`.
 - Stress: NFR-001 and NFR-002 have no Measure, so the first job is a baseline on the reference machine (RTX 4060, 8 GB) — microphone to transcript for a 3-second utterance on CPU and on GPU, and text to first audible sample against a live ElevenLabs endpoint. Then sustained capture for an hour, watching for buffer growth, and ten concurrent `TTSSynthesize` calls to check ordering and that nothing is dropped. Report the baselines to the planner so the NFRs can stop saying `unknown`.
 - Tools: the UE automation framework. GPU paths need the CUDA stack staged, so a GPU test must skip cleanly when it is absent rather than fail.
 - Paths: `FANTASIA/Source/FANTASIATests/Private/` for unit and stress. M-ace has no test module at all yet; `FANTASIAACE/Source/FANTASIAACETests/` is where one belongs, and creating it is M-dist's work (a new module needs a `.Build.cs`), so it is a cross-coder request to `build-dev`.

@@ -308,8 +308,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Configuration", Config)
 	FString URL;
 
-	/** HTTP headers to include in every synthesis request. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Configuration")
+	/**
+	 * @brief HTTP headers to include in every synthesis request. This is where an API
+	 *        key belongs (for example `xi-api-key`), so the value is read from the
+	 *        host project's `DefaultGame.ini` and should be set there. A key typed
+	 *        into the Details panel is still saved into the Blueprint or level asset:
+	 *        this specifier adds an ini source, it does not make the property
+	 *        transient.
+	 *
+	 * @note  A project that already typed a key into a Blueprint or actor asset still
+	 *        has that key stored in the asset: this specifier does not clean it
+	 *        retroactively. Clear the value in the asset and re-save it for the key to
+	 *        leave the asset.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Configuration", Config)
 	TMap<FString, FString> Headers;
 
 	/**

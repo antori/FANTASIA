@@ -81,8 +81,18 @@ public:
 	/** @brief Sets default values for this component's properties. */
 	UOpenAICompatibleComponent();
 
-	/** @brief Active endpoint and auth configuration. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LLM|Configuration")
+	/**
+	 * @brief Active endpoint and auth configuration.
+	 *
+	 * The API key is read from the host project's `DefaultGame.ini` and should be set
+	 * there. A key typed into the Details panel is still saved into the Blueprint or
+	 * level asset: this specifier adds an ini source, it does not make the property
+	 * transient.
+	 *
+	 * @note  An asset that already holds a key still holds it. Clear the value in the
+	 *        asset and re-save it for the key to leave the asset.
+	 */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "LLM|Configuration")
 	FOpenAICompatibleConfig Config;
 
 	// ── Events ──────────────────────────────────────────────────────────

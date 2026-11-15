@@ -1,6 +1,6 @@
 # C-build: Compilation, linking and runtime staging
-- As of: J-0027
-- Version: 1
+- As of: J-0110
+- Version: 1.1
 - Provider: M-dist
 - Consumers: M-asr, M-probabilistic, M-demo, M-tests
 - Tests: FANTASIA/Source/FANTASIATests/Private/BootstrapContractTests.cpp
@@ -78,9 +78,17 @@ from another module (F-012).
 - A new third-party library, engine module or define is a change to this contract and
   needs an ADR (P-06).
 - The `.uplugin` `EngineVersion` and the committed `.modules` BuildId describe the same
-  engine. They move together or users are locked out (NFR-005).
+  engine. They move together or users are locked out (NFR-005). **The gate checks this
+  mechanically**: `FANTASIA/run-tests.ps1` refuses to run when the resolved engine's
+  `Build.version` major and minor differ from the version both `.uplugin` descriptors
+  name, and after a successful compile it compares the emitted `.modules` BuildId with
+  the engine's `CompatibleChangelist` and exits non-zero on a mismatch (ADR-0017,
+  US-027). This is the error users actually hit, and the first clause of this contract a
+  command decides rather than a person.
 - gRPC, protobuf and abseil are linked and include-pathed although no first-party source
   uses them. Removing them is a change request, not a cleanup, because it changes this
   contract and the release asset that carries the libraries (F-002).
-- No test covers any of this at adoption. The `Tests:` path above is where a
-  characterisation test — defines present, imports clean, BuildId matching — belongs.
+- The BuildId clause is now checked by the gate, as above. Nothing else here is: the
+  defines, the engine-module lists, the aGrUM link order and the import cleanliness are
+  all still read from `FANTASIA.Build.cs` rather than asserted. The `Tests:` path above
+  is where a characterisation test for those — defines present, imports clean — belongs.

@@ -278,6 +278,13 @@ protected:
 
 private:
 
+	/**
+	 * Test seam: lets the characterisation tests in WhisperCaptureComponentTests.cpp
+	 * reach the private DSP steps (resampler, RMS, high-pass, noise gate).
+	 * A friend declaration adds no exported or Blueprint-facing surface.
+	 */
+	friend struct FWhisperCaptureTestAccess;
+
 	// ── Audio capture internals ──────────────────────────────────────────
 
 	/**

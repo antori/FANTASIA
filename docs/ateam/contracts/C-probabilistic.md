@@ -1,6 +1,6 @@
 # C-probabilistic: Bayesian networks and influence diagrams
-- As of: J-0027
-- Version: 1
+- As of: J-0108
+- Version: 2
 - Provider: M-probabilistic
 - Consumers: M-demo, M-tests
 - Tests: FANTASIA/Source/FANTASIATests/Private/BayesianNetworkTests.cpp; FANTASIA/Source/FANTASIATests/Private/InfluenceDiagTests.cpp
@@ -52,14 +52,27 @@ from C-fantasia-types; the kernel density estimator comes from C-math.
 
 - A duplicate variable name or a duplicate arc is rejected and logged; the model is
   left unchanged (pinned by `DuplicateVariable`, `DuplicateArc`, `DuplicateNode`).
-- `erase` on an absent variable is a no-op; erasing a present one removes its arcs with
-  it and leaves the model consistent (pinned by `EraseNode`).
-- `idFromName` on an unknown name returns a negative id.
+- Erasing a **present** variable removes its arcs with it and leaves the model consistent
+  (pinned by `EraseNode`). `erase` on an **absent** one does not return: `bn.erase(name)`
+  and `id.erase(name)` resolve the name first and aGrUM throws `gum::NotFound` when it
+  does not exist, and neither method catches (F-034). Callers must check before erasing.
+- `UBayesianNetwork::idFromName` on an unknown name returns -1, guarded by a name-set
+  pre-check. `UInfluenceDiag::idFromName` has no such guard and throws instead (F-034).
 - `getPosterior` before `makeInference()` returns an empty map.
 - `decisionOrderExists()` false means the diagram has no valid decision order and
   `optimalDecision` is meaningless.
-- aGrUM exceptions are caught at the boundary and logged; they do not propagate into
-  Blueprint code. Exceptions are enabled in this module for exactly that reason.
+- **aGrUM exceptions are caught at some of this boundary, not all of it.** Where a call
+  is wrapped, the handler catches `gum::NotFound` alone, so any other aGrUM exception
+  type propagates out of a `BlueprintCallable` function; exceptions are enabled in this
+  module and the engine installs no handler, so that terminates the process. Three
+  groups of entry point have no handler at all: `setBN`, which is the module's only
+  file-reading call and therefore its only untrusted-input path, and which additionally
+  drops `BIFReader::proceed()`'s return value — the parse error count — so a file that
+  parses with errors is treated as loaded (F-025); `writeBIF` and `writeBIFXML`, which
+  hand a caller-supplied path to aGrUM unchecked and unconfined (F-025); and `erase` on
+  both classes together with `UInfluenceDiag::idFromName` (F-034). Callers must validate
+  a variable name against `nodeNames` before erasing it, and must not assume a malformed
+  or unreadable model file fails gracefully.
 
 ## Invariants
 
