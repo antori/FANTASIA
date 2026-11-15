@@ -91,8 +91,11 @@ bool FQualityTooltipConfigAndPreset::RunTest(const FString& Parameters)
 {
 	// US-034's first criterion reads: given UOpenAICompatibleComponent::Config, when its metadata is
 	// read, then it names `Apply Provider Preset` as a call that replaces the whole configuration
-	// including the key, and says the key must be set again after it. The sentence was written on
-	// the ApplyPreset function, and SecretConfigTests asserts it there. Both are pinned as they are.
+	// including the key, and says the key must be set again after it. Config's own metadata carries
+	// the first two clauses, asserted below. Neither it nor ApplyPreset's says to set the key again
+	// as advice: ApplyPreset says that doing so commits a literal, and both give the ini route
+	// instead. That is a decision (ADR-0001), and the criterion's wording is pending a change
+	// request, so the absence on Config is pinned under F-059.
 	const UClass* Class = UOpenAICompatibleComponent::StaticClass();
 	const FProperty* Config = Class->FindPropertyByName(TEXT("Config"));
 	const UFunction* Preset = Class->FindFunctionByName(TEXT("ApplyPreset"));
@@ -105,8 +108,13 @@ bool FQualityTooltipConfigAndPreset::RunTest(const FString& Parameters)
 	const FString OnPreset = ToolTipOf(Preset);
 
 	TestTrue(TEXT("Config's tooltip tells the user the key belongs in DefaultGame.ini"), OnConfig.Contains(TEXT("DefaultGame.ini")));
-	TestFalse(TEXT("Config's tooltip does not name the node that erases the key (F-059, pinned)"),
-		OnConfig.Contains(TEXT("Apply Provider Preset")) || OnConfig.Contains(TEXT("ApplyPreset")));
+	TestTrue(TEXT("Config's tooltip names the node that replaces the configuration"), OnConfig.Contains(TEXT("Apply Provider Preset")));
+	TestTrue(TEXT("and says it replaces the whole configuration, the key included"),
+		OnConfig.Contains(TEXT("replaces this whole configuration")) && OnConfig.Contains(TEXT("APIKey")));
+	TestTrue(TEXT("and that a key read from DefaultGame.ini is discarded by the call"), OnConfig.Contains(TEXT("discarded by that call")));
+	TestTrue(TEXT("and gives the ini route that keeps the key in configuration"), OnConfig.Contains(TEXT("skip that node")));
+	TestFalse(TEXT("Config's tooltip does not tell the user to set the key again (F-059, pinned: the criterion's clause, not a defect)"),
+		OnConfig.Contains(TEXT("again")));
 
 	TestTrue(TEXT("ApplyPreset's tooltip names the node a user calls"), OnPreset.Contains(TEXT("Apply Provider Preset")));
 	TestTrue(TEXT("and says the call replaces the whole configuration"), OnPreset.Contains(TEXT("wholesale")));

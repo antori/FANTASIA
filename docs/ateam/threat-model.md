@@ -1,5 +1,5 @@
 # Threat model
-- As of: J-0211
+- As of: J-0236
 - Owner: security
 - Scope: design version 3; all twelve modules (M-core, M-asr, M-tts, M-llm, M-prolog, M-probabilistic, M-ml, M-neo4j, M-ace, M-demo, M-tests, M-dist); no services — FANTASIA is a library loaded into someone else's process
 
@@ -209,8 +209,17 @@ have read the test.
     device's sample rate and the backend's callback size — so it is not a blocker. It is
     major because the garbage value propagates: into `SetRecentPeak`'s unclamped
     float-to-int conversion, which is the VAD's only input, and into the high-pass filter's
-    persistent state (F-041). Reachable continuously on a 44.1 kHz device with large
-    callbacks, never on the 48 kHz family, where the ratio is an exact integer.
+    persistent state (F-041). Reachability is measured over every callback size from 64 to
+    8192 frames (J-0235): **3839 of 8129 sizes at 44100 Hz and 6237 of 8129 at 88200, and
+    none at all at 48000, 96000 or 32000**, which divide 16000 exactly, so every phase value
+    is representable. At 44100 every size up to 1200 frames is clean and the plugin requests
+    1024 (`WhisperCaptureComponent.cpp:471`) — but the request is advisory, so the shipped
+    configuration is clean only while the backend honours it. The round periods are the worst
+    case: 2205 frames (50 ms) and 4410 (100 ms) over-read on **every** callback, because the
+    phase realigns on an exact integer every 160 output samples and the accumulated error of
+    repeated addition puts the last tap just below the boundary. Which sizes are affected is
+    therefore a sign-of-rounding-error accident and cannot be read off the code, so the fix
+    is structural — index from the `double` and clamp `Idx0` — not a tolerance.
   - *Captured audio validated too late*: F-041 (minor, open) — the NaN, Inf, denormal and
     range check lives in `TranscribeBuffer`, downstream of both the peak publication and the
     filter, so one non-finite sample latches the IIR state for the session and ASR silently
@@ -843,8 +852,9 @@ open.
   states that these artifacts "are gitignored"; for this one directory that is false, and
   the libraries themselves arrive unverified (F-026).
 - **F-017 (major, open)** — M-asr's capture resampler reads one frame past its input
-  whenever the carried phase lands within half a float ulp below the frame count:
-  continuously on a 44.1 kHz device with large callbacks, never on the 48 kHz family. No
+  whenever the carried phase lands within half a float ulp below the frame count: on roughly
+  half of all callback sizes on the 44.1 kHz family, on every callback at the round 50 ms and
+  100 ms periods, and on none at all at 48, 96 or 32 kHz (J-0235). No
   untrusted input reaches it, so it is not a blocker; it is major because the out-of-bounds
   value propagates into the VAD's only input and into persistent filter state, where it can
   silently stop ASR for the rest of a session (F-041), and because it makes the capture path

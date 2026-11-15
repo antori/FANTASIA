@@ -1,4 +1,4 @@
-{"version": 1, "project": "FANTASIA", "counts": {"ADR": 17, "C": 12, "CR": 12, "DEC": 31, "F": 69, "G": 5, "M": 12, "NFR": 5, "NG": 4, "P": 19, "REQ": 4, "S": 2, "T": 2, "US": 34}, "kinds": {"ADR": "decision record", "C": "contract", "CR": "change request", "DEC": "implementation decision", "F": "finding", "G": "goal", "M": "module", "NFR": "quality scenario", "NG": "non-goal", "P": "principle", "REQ": "request", "S": "sprint", "T": "task", "US": "story"},
+{"version": 1, "project": "FANTASIA", "counts": {"ADR": 17, "C": 12, "CR": 12, "DEC": 31, "F": 70, "G": 5, "M": 12, "NFR": 5, "NG": 4, "P": 19, "REQ": 4, "S": 2, "T": 2, "US": 34}, "kinds": {"ADR": "decision record", "C": "contract", "CR": "change request", "DEC": "implementation decision", "F": "finding", "G": "goal", "M": "module", "NFR": "quality scenario", "NG": "non-goal", "P": "principle", "REQ": "request", "S": "sprint", "T": "task", "US": "story"},
  "nodes": [
   {"id": "G-1", "kind": "G", "src": "docs/ateam/brief.md:41", "title": "Let researchers wire a full conversational pipeline — speech in, reasoning,"},
   {"id": "G-2", "kind": "G", "src": "docs/ateam/brief.md:44", "title": "Keep every capability an independent, opt-in component, so that what works for"},
@@ -175,7 +175,7 @@
   {"category": "bug", "entries": 2, "first": "J-0032", "id": "F-014", "kind": "F", "last": "J-0234", "severity": "major", "src": "docs/ateam/HISTORY.md:991", "status": "fixed", "title": "The 5.8 line's default install cannot complete."},
   {"category": "bug", "entries": 1, "first": "J-0033", "id": "F-015", "kind": "F", "last": "J-0033", "severity": "minor", "src": "docs/ateam/HISTORY.md:1018", "status": "open", "title": "The Linux bootstrap's GPU fetch names an asset that has never been published, so --no-gpu is effectively mandatory on Linux and the default run reports a faile…"},
   {"category": "bug", "entries": 2, "first": "J-0034", "id": "F-016", "kind": "F", "last": "J-0227", "severity": "major", "src": "docs/ateam/HISTORY.md:1039", "status": "fixed", "title": "FANTASIAACE.uplugin on Development declares EngineVersion 5.8.0, and every committed FANTASIAACE binary is still the 5.7 build."},
-  {"category": "bug", "entries": 2, "first": "J-0065", "id": "F-017", "kind": "F", "last": "J-0130", "severity": "minor", "src": "docs/ateam/HISTORY.md:2137", "status": "open", "title": "Found while characterising US-029."},
+  {"category": "bug", "entries": 3, "first": "J-0065", "id": "F-017", "kind": "F", "last": "J-0235", "severity": "minor", "src": "docs/ateam/HISTORY.md:2137", "status": "open", "title": "Found while characterising US-029."},
   {"category": "quality", "entries": 2, "first": "J-0066", "id": "F-018", "kind": "F", "last": "J-0145", "severity": "minor", "src": "docs/ateam/HISTORY.md:2148", "status": "open", "title": "The acceptance criterion conflicts with the same story's constraint that the file opens no audio device."},
   {"category": "quality", "entries": 1, "first": "J-0067", "id": "F-019", "kind": "F", "last": "J-0067", "severity": "minor", "src": "docs/ateam/HISTORY.md:2159", "status": "open", "title": "All three are pinned as they are by the FANTASIA.WhisperCapture tests (Resample.LoudestChannelWins, Rms.LongBufferStaysWithinOneThousandth)."},
   {"category": "security", "entries": 1, "first": "J-0069", "id": "F-020", "kind": "F", "last": "J-0069", "severity": "blocker", "src": "docs/ateam/HISTORY.md:2178", "status": "open", "title": "The TLS transport accepts any certificate from any server."},
@@ -217,7 +217,7 @@
   {"category": "performance", "entries": 2, "first": "J-0203", "id": "F-056", "kind": "F", "last": "J-0209", "severity": "major", "src": "docs/ateam/HISTORY.md:5506", "status": "open", "title": "The 16 MiB message cap bounds bytes on the wire, not what they decode into."},
   {"category": "bug", "entries": 1, "first": "J-0204", "id": "F-057", "kind": "F", "last": "J-0204", "severity": "minor", "src": "docs/ateam/HISTORY.md:5517", "status": "open", "title": "The message cap is charged to bytes handed to the dechunker, and the check runs on the whole transport read, so a read that completes a message and also carrie…"},
   {"category": "bug", "entries": 1, "first": "J-0205", "id": "F-058", "kind": "F", "last": "J-0205", "severity": "minor", "src": "docs/ateam/HISTORY.md:5528", "status": "open", "title": "UNeo4jComponent::ExtractHostname cuts at the first colon, which for a bracketed IPv6 literal is inside the brackets: ExtractHostname('bolt+s://[::1]:7687') is…"},
-  {"category": "quality", "entries": 1, "first": "J-0206", "id": "F-059", "kind": "F", "last": "J-0206", "severity": "minor", "src": "docs/ateam/HISTORY.md:5539", "status": "open", "title": "US-034's first criterion is about the reflected metadata of UOpenAICompatibleComponent::Config: it must name Apply Provider Preset as a call that replaces the…"},
+  {"category": "quality", "entries": 2, "first": "J-0206", "id": "F-059", "kind": "F", "last": "J-0238", "severity": "minor", "src": "docs/ateam/HISTORY.md:5539", "status": "fixed", "title": "US-034's first criterion is about the reflected metadata of UOpenAICompatibleComponent::Config: it must name Apply Provider Preset as a call that replaces the…"},
   {"category": "security", "entries": 1, "first": "J-0210", "id": "F-060", "kind": "F", "last": "J-0210", "severity": "major", "src": "docs/ateam/HISTORY.md:5663", "status": "open", "title": "Found while ruling on F-056, and it is the fact that decides F-056's severity, so it is recorded apart from it: the amplification F-056 measures is bounded per…"},
   {"category": "security", "entries": 1, "first": "J-0215", "id": "F-061", "kind": "F", "last": "J-0215", "severity": "major", "src": "docs/ateam/HISTORY.md:5947", "status": "open", "title": "The sentence CR-012 refused to put in C-neo4j as a lie by omission, written instead into the surface more integrators read."},
   {"category": "quality", "entries": 1, "first": "J-0216", "id": "F-062", "kind": "F", "last": "J-0216", "severity": "minor", "src": "docs/ateam/HISTORY.md:5958", "status": "open", "title": "US-032 is ready and heads S-03, so an S-03 agent reads a false premise inside the criterion it implements - and the correction's conclusion, that the branch mu…"},
@@ -227,7 +227,8 @@
   {"category": "performance", "entries": 1, "first": "J-0220", "id": "F-066", "kind": "F", "last": "J-0220", "severity": "minor", "src": "docs/ateam/HISTORY.md:5998", "status": "open", "title": "FANTASIA/Source/FANTASIA/CLAUDE.md states that every component doing I/O dispatches off the game thread; C-neo4j says only that queries do."},
   {"category": "quality", "entries": 1, "first": "J-0225", "id": "F-067", "kind": "F", "last": "J-0225", "severity": "minor", "src": "docs/ateam/HISTORY.md:6041", "status": "open", "title": "This is the 5.9 ACE port, pre-identified, and that is the value of filing it: next time the base will be known rather than discovered."},
   {"category": "quality", "entries": 2, "first": "J-0228", "id": "F-068", "kind": "F", "last": "J-0230", "severity": "major", "src": "docs/ateam/HISTORY.md:6069", "status": "accepted", "title": "Three bundles as structured for 5.7 means roughly 4.5 GB of release assets carrying about 3.3 GB of pure duplication, and a 5.8 release of about 5.2 GB."},
-  {"category": "bug", "entries": 1, "first": "J-0229", "id": "F-069", "kind": "F", "last": "J-0229", "severity": "major", "src": "docs/ateam/HISTORY.md:6084", "status": "open", "title": "F-013 records the stale directory name as cosmetic."}
+  {"category": "bug", "entries": 1, "first": "J-0229", "id": "F-069", "kind": "F", "last": "J-0229", "severity": "major", "src": "docs/ateam/HISTORY.md:6084", "status": "open", "title": "F-013 records the stale directory name as cosmetic."},
+  {"category": "quality", "entries": 1, "first": "J-0237", "id": "F-070", "kind": "F", "last": "J-0237", "severity": "major", "src": "docs/ateam/HISTORY.md:6224", "status": "open", "title": "A gate report is evidence for the tree it ran on and for no other, and this sprint used one report as standing evidence across changes made after it."}
  ],
  "edges": [
   ["ADR-0014", "derives_from", "REQ-003"],
@@ -698,6 +699,8 @@
   ["F-068", "about", "US-020"],
   ["F-069", "about", "M-dist"],
   ["F-069", "about", "US-020"],
+  ["F-070", "about", "M-tests"],
+  ["F-070", "about", "US-034"],
   ["M-ace", "consumes", "C-elevenlabs-protocol"],
   ["M-ace", "consumes", "C-fantasia-types"],
   ["M-ace", "consumes", "C-rest-tts"],

@@ -6130,3 +6130,126 @@ Alternatives rejected: (a) leave the gate refusing on any requested bundle - mak
 - Evidence: gh release view runtime-v3.0 now lists all four NVIDIA assets in state 'uploaded', at byte sizes identical to the local archives they were packaged from: nv-ace-reference-ue58-full.tar.gz 689029094, nv-audio2face-mark-ue58.tar.gz 1509920991, nv-audio2face-james-ue58.tar.gz 1509911871, nv-audio2face-claire-ue58.tar.gz 1510351662, plus nv-ace-reference-ue58-overlay.tar.gz 966626 and the three unchanged core assets. The bundles are the UE 5.8 hand-port (BuildId 55116800), not the ue57 builds F-014 ruled out. bootstrap.bat's NVIDIA_AVAILABLE and the four FETCH_* defaults are back to 1 in da759764, so the unflagged run installs everything again as ADR-0008 and C-install require.
 - Commit: da759764
 - Changes: FANTASIA/bootstrap.bat, FANTASIA/bootstrap.sh, FANTASIAACE/FANTASIAACE.uplugin, README.md
+
+## J-0235 | 2026-11-16 | F-017 | security
+- Event: opened
+- Corrects: J-0130
+- Kind: security
+- Severity: major
+- Module: M-asr
+- Story: US-029
+- Repro: FANTASIA.WhisperCapture.Resample.ReadsOneFramePastInput; exhaustive sweep of callback sizes 64-8192 shows 3839 of 8129 affected at 44100 Hz, 6237 of 8129 at 88200, and 0 of 8129 at 48000, 96000 and 32000; at 44100 every size up to 1200 frames is clean while 2205 (50 ms) and 4410 (100 ms) over-read on every callback
+- Changes: none
+
+Better reachability evidence than J-0130 carried, from an exhaustive sweep that finished after
+that entry was written. It does not change the severity; it removes the qualifier "with large
+callbacks", which was an artifact of my having spot-checked eleven sizes instead of all of
+them.
+
+**Every callback size from 64 to 8192 frames, 500 callbacks each, faithful arithmetic
+(repeated `Phase += SrcToDst` in double, `float` rounding at the midpoint below
+`NumFrames`):**
+
+| device rate | callback sizes that over-read |
+| :--- | :--- |
+| 44100 | **3839 of 8129** |
+| 88200 | **6237 of 8129** |
+| 11025 | 4289 of 8129 |
+| 22050 | 1893 of 8129 |
+| 48000 | **0** of 8129 |
+| 96000 | **0** of 8129 |
+| 32000 | **0** of 8129 |
+
+The three zeros confirm the mechanism I claimed generally rather than by sample: 48000, 96000
+and 32000 divide 16000 exactly, so every phase value is exactly representable and none can
+land below an integer boundary. The 44.1 kHz family is where this bug lives, and on a 44.1 kHz
+device roughly **half of all possible callback sizes** are affected. 500 callbacks per size
+understates it — sizes whose first hit comes later are counted clean here.
+
+**The affected set has a structure, and it is not "large":**
+
+| frames (44100) | period | result over 5000 callbacks |
+| :--- | :--- | :--- |
+| 441, 448, 480, 512, 882, 960, 1024, 1200 | 10-27 ms | clean |
+| 1440 | 32.7 ms | 1 over-read per 1.6 s |
+| 2048 | 46.4 ms | 1 per 21.1 s |
+| **2205** | **50 ms** | **every callback** |
+| 4096 | 92.9 ms | 1 per 42.2 s |
+| **4410** | **100 ms** | **every callback** |
+
+Everything at or below 1200 frames is clean, and the plugin requests 1024
+(`WhisperCaptureComponent.cpp:471`), so the shipped configuration is clean **if the backend
+honours the request** — which is luck, not design, since the request is advisory and the
+callback size is the backend's to choose.
+
+The two catastrophic sizes are the round periods, 50 ms and 100 ms, and the reason is worth
+recording because it explains why the affected set otherwise looks arbitrary. `SrcToDst` is
+441/160 = 2.75625, not representable in binary. The phase realigns on an exact integer every
+160 output samples, so for `NumFrames` = 2205 (k=800) and 4410 (k=1600) the loop's last tap
+falls exactly on `NumFrames` in exact arithmetic — and the accumulated error of 800 and 1600
+repeated additions puts the computed sum just *below* it, so `Phase < SrcEnd` passes and the
+`float` cast then rounds up to `NumFrames`. At 441 (k=160) and 882 (k=320) the accumulated
+error happens to land on the other side, so the loop exits correctly and those sizes are
+clean. The bug is a sign-of-rounding-error accident, which is why no amount of reading the
+code reveals which configurations are affected and why the fix must be structural (index from
+the `double`, clamp `Idx0`) rather than a tolerance.
+
+Unchanged: severity major, `Kind=security`, not a blocker, for the reasons in J-0130 — no
+untrusted input reaches the index arithmetic, and nothing crosses a trust boundary. All of
+this is simulation of the arithmetic; it has still not been observed under a sanitizer on real
+hardware, which needs a 44.1 kHz device delivering 1440 frames or more.
+
+## J-0236 | 2026-11-16 | NOTE | security
+- Changes: threat-model.md
+
+F-017's reachability in the threat model is replaced with the measured figures from J-0235,
+in the M-asr surface section and in Open risks. The severity and the ruling are unchanged;
+what changes is that "with large callbacks" was my own spot-check artifact and is now an
+exhaustive result.
+
+The two statements that mattered and were imprecise: "reachable continuously on a 44.1 kHz
+device with large callbacks" understates it — on a 44.1 kHz device 3839 of 8129 callback
+sizes over-read — and "never on the 48 kHz family" is now confirmed for every size from 64 to
+8192 at 48000, 96000 and 32000 rather than asserted from the ratio argument alone.
+
+The operationally useful half, recorded because a maintainer will want it before touching the
+resampler: every size up to 1200 frames is clean at 44100, the plugin requests 1024, and the
+request is advisory — so the shipped configuration is clean by luck, not by design. The two
+round periods, 2205 (50 ms) and 4410 (100 ms), over-read on every callback, because the phase
+realigns on an exact integer every 160 output samples and the accumulated error of 800 and
+1600 repeated additions lands just below the boundary where 160 and 320 additions land just
+above. Which configurations are affected is a sign-of-rounding-error accident, so the fix has
+to be structural rather than a tolerance.
+
+## J-0237 | 2026-11-16 | F-070 | lead
+- Event: opened
+- Module: M-tests
+- Kind: quality
+- Severity: major
+- Story: US-034
+- Repro: docs/ateam/HISTORY.md cites gate report e093da91568a (19:03:33, 198 tests 0 failures) as evidence in four separate entries, each with the parenthetical 'read, not re-run'. One of them evidences OpenAICompatibleComponent.h:84-96 against :128-141. In the file today :84-96 contains the Apply Provider Preset note beginning at :95, and ApplyPreset is at :151 - line ranges that can only describe the file before that note existed. Gate run 0054e85f132a on the same tree that was pushed as origin/Development: FAILED (5), 1 of 198, FANTASIA.Quality.Tooltip.ConfigAndPreset.
+- Changes: none
+
+A gate report is evidence for the tree it ran on and for no other, and this sprint used one report as standing evidence across changes made after it.
+
+The sequence. The gate was genuinely green at 198/0 at 19:03:33. Findings were then written citing that report rather than running the gate, which is cheap and was reasonable for findings that changed nothing. But at least one change was then made in response to a finding - the Apply Provider Preset note added to UOpenAICompatibleComponent::Config, which improved the metadata and discharged F-059's first half - and that change falsified the tester's pin asserting Config names neither the node nor the erasure. Nothing re-ran the gate afterwards. The suite went red at the moment the code got better, and every subsequent statement that the gate was green was a re-read of a report that predated the change.
+
+The consequence was not hypothetical. I pushed that tree to origin/Development, merged main into it so main could fast-forward, and told the user the gate's 198 tests passed. I had not run it. The red surfaced only because I ran the gate on the merge result before recommending the promotion, and the project's Definition of Done requires the gate to pass. A promotion on that evidence would have put a failing suite on a shipped branch.
+
+The report directory e093da91568a no longer exists on disk, so the claim can no longer even be re-checked - which is the second half of the defect: the evidence was not only stale but perishable.
+
+What would prevent it: an entry citing a gate report names the commit or tree the run covered, so a later reader can tell whether it still applies; and a change made in response to a finding re-runs the gate rather than inheriting the previous run's verdict. The cost of the habit here was eight minutes of gate time against shipping a red suite to main.
+
+## J-0238 | 2026-11-16 | F-059 | tester
+- Event: fixed
+- Evidence: FANTASIA/Source/FANTASIA/Public/OpenAICompatibleComponent.h:95-99 (Config's note names Apply Provider Preset, the erasure of APIKey, and the ini route); gate PASSED 198 tests 0 failures with FANTASIA.Quality.Tooltip.ConfigAndPreset asserting it
+- Repro: FANTASIA/Source/FANTASIATests/Private/Quality/Neo4jTransportQualityTests.cpp, test FANTASIA.Quality.Tooltip.ConfigAndPreset
+- Changes: none
+
+Ruling, from the metadata as it stands (OpenAICompatibleComponent.h:95-99, Config's @note): F-059's first half, that Config's metadata names neither the node nor the erasure, was true when J-0206 was filed and is fixed now. The note names "Apply Provider Preset", says it replaces this whole configuration, APIKey included, and that a key read from DefaultGame.ini is discarded by that call. The pin at Neo4jTransportQualityTests.cpp asserted the old silence and went stale when the note landed; it is replaced by four positive assertions on Config's tooltip (node name; whole configuration and APIKey; discarded by that call; skip that node, the ini route). The gate ran 198 tests, 0 failures.
+
+Dating, checked rather than taken: J-0206 cites ApplyPreset's doc at :128-141 and J-0214 cites Config's block at :84-96 as silent. Today ApplyPreset's block opens at :134, six lines below the cited :128, and the six lines are exactly the blank line and the five-line note at :94-99. So both entries describe the file without the note, and the note was added afterwards; the header's mtime (2026-11-15 20:39) is after the 19:03 gate report the later entries cite. Git cannot date it: the whole sprint is one commit, 014a33fd.
+
+What does not survive as a defect: the criterion's third clause, that the metadata say the key must be set again after the call. Config's note does not say it, and ApplyPreset's says the opposite: setting the key again makes it a literal in a committed Blueprint graph. That is a decision (T-29, ADR-0001), the product is right, and the criterion's wording is what conflicts with it, as J-0208 and J-0214 both ruled. It is not a finding against the product, so no replacement F is opened; the remedy is a change request to US-034's first criterion (move it onto Config, replace the set-again clause with the ini route), which is the lead's and the user's. Until then the test pins the absence on Config (assertion labelled F-059, pinned: the criterion's clause, not a defect), so that a later edit that adds advice to set the key again fails visibly.
+
+J-0208's first half (a location mismatch, fixable) was correct at the time and is now resolved; its second half stands. J-0214's evidence line against :84-96 is stale on the same account; its conclusion on the criterion's second clause stands. Not touched: F-064, the label at :113 on ApplyPreset's "again" assertion, still open.
