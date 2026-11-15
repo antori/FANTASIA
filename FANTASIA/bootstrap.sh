@@ -14,10 +14,9 @@ set -euo pipefail
 #  engine line. Use --no-* flags to opt out.
 #
 #  NOTE: the NVIDIA ACE / Mark / James / Claire bundles (interactive-MetaHuman
-#  lip-sync) are Win64-only (TensorRT/cuBLAS + Windows A2F runtime), and on
-#  the UE 5.8 line they are not published at all -- see bootstrap.bat. They
-#  are opt-in here too, and asking for one explains that instead of failing
-#  on a 404.
+#  lip-sync) are Win64-only (TensorRT/cuBLAS + Windows A2F runtime), so there
+#  is nothing to fetch here; bootstrap.bat installs them by default on
+#  Windows. Asking for one explains that instead of failing on a 404.
 #
 #  Usage:
 #    bootstrap.sh                  install everything available (default)
@@ -57,7 +56,7 @@ while [ $# -gt 0 ]; do
         --ace|--mark|--james|--claire|--characters|--nvidia)
             WANT_NVIDIA=1 ;;
         --no-ace|--no-mark|--no-james|--no-claire|--no-characters|--no-nvidia)
-            : ;;  # already the default: the NVIDIA bundles are opt-in
+            : ;;  # already the default: no NVIDIA bundle is fetchable here
         --force)        FORCE=1 ;;
         *) echo "Unknown argument: $1"; echo "Usage: bootstrap.sh [--no-model|--no-gpu|--no-deps|--minimal] [--force]"; exit 1 ;;
     esac
@@ -71,22 +70,16 @@ if [ "${WANT_NVIDIA}" = "1" ]; then
 
  The NVIDIA ACE / Mark / James / Claire bundles cannot be installed here.
 
- Why, twice over:
-   - They are Win64-only: the Audio2Face runtime is a Windows build on
-     TensorRT/cuBLAS, so there is no Linux or macOS version to fetch.
-   - On the UE 5.8 line they are not published for any platform. NVIDIA
-     ships its ACE plugins for UE 5.6 only, so every later engine version
-     needs a hand-port, and the UE 5.8 port does not exist yet.
+ Why: they are Win64-only. The Audio2Face runtime is a Windows build on
+ TensorRT/cuBLAS, so there is no Linux or macOS version to fetch.
 
  What you can do:
    - Run bootstrap.sh with no NVIDIA flag for a complete core install. Core
      FANTASIA needs none of these: ASR, LLM, TTS, Neo4j, Prolog and the
      Bayesian stack all work without them. Only Audio2Face lip-sync (the
-     FANTASIAACE companion plugin) does, and FANTASIAACE is not available
-     for UE 5.8 either.
-   - For lip-sync today, use the UE 5.7 line on Windows: the `5.7` branch of
-     this repository, whose bootstrap.bat fetches the bundles from
-     runtime-v2.0.
+     FANTASIAACE companion plugin) does.
+   - For lip-sync, use Windows: bootstrap.bat installs the bundles by
+     default, from the same release as the core artifacts.
 EOF
     exit 1
 fi

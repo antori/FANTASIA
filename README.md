@@ -87,7 +87,7 @@ FANTASIA bundles a set of independent components. Use only what you need.
 
 | Integration | Purpose |
 | --- | --- |
-| **NVIDIA ACE** *(optional companion plugin — **not available for UE 5.8**)* | Audio-driven facial lip-sync and emotion. Ships as the separate **FANTASIAACE** companion plugin, which adds `UACERESTTTSComponent` and requires NVIDIA's [NV_ACE_Reference](https://developer.nvidia.com/ace). **This release of FANTASIA is core-only: FANTASIAACE is not available for UE 5.8** — see [NVIDIA Audio2Face lip-sync](#nvidia-audio2face-lip-sync-not-available-for-ue-58). Core FANTASIA is unaffected and still produces the audio. |
+| **NVIDIA ACE** *(optional companion plugin)* | Audio-driven facial lip-sync and emotion. Ships as the separate **FANTASIAACE** companion plugin, which adds `UACERESTTTSComponent` and requires NVIDIA's [NV_ACE_Reference](https://developer.nvidia.com/ace). Both are available on this line, and `bootstrap.bat` installs the NVIDIA side by default — see [NVIDIA Audio2Face lip-sync](#nvidia-audio2face-lip-sync). Core FANTASIA does not depend on it; core produces the audio, ACE animates a face from it. |
 
 ## Quick Start
 
@@ -101,36 +101,38 @@ If you want to start from scratch, install the plugin into your own project (nex
 
 FANTASIA is distributed prebuilt — for most users, no compilation is required.
 
-> **This is the UE 5.8 release, and it is core-only.** The `FANTASIAACE` companion plugin and the NVIDIA Audio2Face bundles are **not available for UE 5.8**; everything else is. See [NVIDIA Audio2Face lip-sync](#nvidia-audio2face-lip-sync-not-available-for-ue-58) for why and for what to use instead.
+> **This is the UE 5.8 release.** The `FANTASIAACE` companion plugin and the NVIDIA Audio2Face bundles are available on this line, and `bootstrap.bat` installs the NVIDIA side by default — see [NVIDIA Audio2Face lip-sync](#nvidia-audio2face-lip-sync).
 
 1. If your UE project does not already have one, create a `Plugins` folder at the project root.
 2. Clone or download this repository and put the `FANTASIA` folder into that `Plugins` folder.
-3. From `Plugins/FANTASIA/FANTASIA/`, run `bootstrap.bat` (Windows) or `bootstrap.sh` (Linux/macOS). **By default it installs the whole core plugin**, fetched from this repo's GitHub Releases (hosted there instead of LFS to keep clones lean). The default pulls:
+3. From `Plugins/FANTASIA/FANTASIA/`, run `bootstrap.bat` (Windows) or `bootstrap.sh` (Linux/macOS). **By default it installs everything published for your platform**, fetched from this repo's GitHub Releases (hosted there instead of LFS to keep clones lean). The default pulls:
    - **Whisper ASR model** (~574 MB).
    - **Prebuilt GPU whisper stack** (~540 MB, Windows) — flip `UWhisperSubsystem.Backend = GPU`, no rebuild.
    - **Win64 build-time static libs** (~330 MB: aGrUM, gRPC, OpenSSL) for C++ recompiles.
+   - **NVIDIA Audio2Face bundles** (~4.9 GB, Windows only): `NV_ACE_Reference` plus the ready-to-use `Mark`, `James` and `Claire` sample characters, moved next to FANTASIA in your `Plugins` folder automatically. `--no-nvidia` skips them.
 
-   That is everything the core plugin needs: ASR, LLM, TTS, Neo4j, Prolog and the Bayesian stack all work after a default run. Add `--enable-plugins` to also switch FANTASIA on in your project's `.uproject` (a `.uproject.bak` is written first). The script is idempotent (re-running is safe) and prints a final summary.
+   The first three are everything the *core* plugin needs: ASR, LLM, TTS, Neo4j, Prolog and the Bayesian stack all work without the NVIDIA bundles. Add `--enable-plugins` to also switch the FANTASIA stack on in your project's `.uproject` (a `.uproject.bak` is written first). The script is idempotent (re-running is safe) and prints a final summary.
 4. Launch Unreal Engine. The plugin appears in the **Plugins** list (already enabled if you used `--enable-plugins`; otherwise enable it in the Plugins panel).
 
 **Flags:**
 
 - `--no-gpu` — skip the CUDA GPU whisper stack.
 - `--no-deps` — skip the build-time static libs (Blueprint-only users who never recompile).
-- `--minimal` — Whisper model only (no GPU stack, no build deps).
+- `--minimal` — Whisper model only (no GPU stack, no build deps, no NVIDIA bundles).
 - `--enable-plugins` — also enable the FANTASIA stack in your project's `.uproject` (writes a `.uproject.bak` first).
 - `--force` — re-download even if files are already present.
-- `--ace` / `--mark` / `--james` / `--claire` / `--characters` / `--nvidia` — opt in to the NVIDIA Audio2Face bundles. **On UE 5.8 these are refused with an explanation**, because the bundles do not exist for this engine version; nothing is downloaded. The `--no-*` forms of these flags are still accepted, and are no-ops, so command lines written for earlier releases keep working.
+- `--no-ace` / `--no-mark` / `--no-james` / `--no-claire` / `--no-characters` / `--no-nvidia` — skip some or all of the NVIDIA Audio2Face bundles. The positive forms (`--ace`, `--characters`, `--nvidia`, …) are still accepted, and are no-ops now that the bundles are installed by default, so command lines written for earlier releases keep working.
 
-### NVIDIA Audio2Face lip-sync (not available for UE 5.8)
+### NVIDIA Audio2Face lip-sync
 
-Audio2Face lives in the companion plugin `FANTASIAACE`, which drives a MetaHuman's face via NVIDIA's `NV_ACE_Reference`. **Neither is available on the UE 5.8 line:**
+Audio2Face lives in the companion plugin `FANTASIAACE`, which drives a MetaHuman's face via NVIDIA's `NV_ACE_Reference`. Both are available on the UE 5.8 line:
 
-- NVIDIA publishes its ACE plugins for **UE 5.6 only**, so every later engine version needs a hand-port. The UE 5.7 port exists; the UE 5.8 port does not yet.
-- Consequently the NVIDIA bundles are not published in this line's release, and `FANTASIAACE`'s prebuilt binaries are UE 5.7 ones. `FANTASIAACE` declares `EngineVersion 5.7.0`, so UE 5.8 will warn you rather than load it; **do not enable it on UE 5.8** — don't copy the `FANTASIAACE` folder into your project at all.
-- **Core FANTASIA is unaffected.** It never depended on ACE: it produces the audio, and `FANTASIAACE` only animated a face from it.
+- NVIDIA publishes its ACE plugins for **UE 5.6 only**, so every later engine version needs a hand-port. The UE 5.8 port is done, and the bundles in this line's release are built from it.
+- `bootstrap.bat` installs them by default: `NV_ACE_Reference` plus the ready-to-use `Mark`, `James` and `Claire` sample characters, placed next to FANTASIA in your `Plugins` folder automatically. `FANTASIAACE` itself ships prebuilt for UE 5.8 in this repository. Enable `FANTASIA`, `FANTASIAACE`, `NV_ACE_Reference` and the character plugins in the editor's **Plugins** panel, or run `bootstrap.bat --enable-plugins`.
+- **Upgrading a clone that already has them?** The bootstrap leaves NVIDIA plugins that are already installed exactly as they are. If this clone fetched them for an earlier engine version, delete them first — both from the `NVIDIA-UE57-Bundle/` staging folder next to `bootstrap.bat` (the name is historical; it is used on every engine line) and from your project's `Plugins` folder — or you keep the older build on UE 5.8.
+- **Core FANTASIA does not depend on it.** Core produces the audio and `FANTASIAACE` only animates a face from it, so `--no-nvidia` costs you nothing else: ASR, LLM, TTS, Neo4j, Prolog and the Bayesian stack are unaffected.
 
-**For Audio2Face lip-sync today, use the UE 5.7 line** — the `5.7` branch of this repository, whose `bootstrap.bat` fetches a complete, UE 5.7-recompiled NVIDIA stack (`NV_ACE_Reference` plus the ready-to-use `Mark`, `James` and `Claire` sample characters) and places it next to FANTASIA automatically. Those plugins are redistributed in good faith for this non-commercial academic project, with all NVIDIA license texts retained. **DLSS / Streamline** are not bundled on any line — NVIDIA's RTX SDK license forbids standalone redistribution, and they aren't required for lip-sync; install them from the Epic Marketplace if you want the rendering-performance boost.
+Those NVIDIA plugins are redistributed in good faith for this non-commercial academic project, with all NVIDIA license texts retained; see `NV_ACE_Reference/README-FANTASIA-UE5.8-bundle.txt` for provenance. **DLSS / Streamline** are not bundled on any line — NVIDIA's RTX SDK license forbids standalone redistribution, and they aren't required for lip-sync; install them from the Epic Marketplace if you want the rendering-performance boost.
 
 ### Optional: Whisper on GPU (CUDA)
 
@@ -153,7 +155,7 @@ FANTASIA bundles or fetches code from several third-party projects (whisper.cpp,
 
 ## Troubleshooting
 
-If the editor says a plugin was **"built with a different engine version"**, check which plugin it names. For `FANTASIAACE`, that is expected on UE 5.8 and there is no fix: it is not available for this engine version (see [NVIDIA Audio2Face lip-sync](#nvidia-audio2face-lip-sync-not-available-for-ue-58)) — remove the `FANTASIAACE` folder from your `Plugins` folder and carry on; core FANTASIA does not need it. For `FANTASIA` itself, you are running an engine build whose compatible changelist differs from the one the shipped DLLs were built against; rebuild the plugin from source, or use the release matching your engine version.
+If the editor says a plugin was **"built with a different engine version"**, you are running an engine build whose compatible changelist differs from the one the shipped DLLs were built against. Rebuild the plugin from source, or use the release matching your engine version.
 
 If the editor reports that your project cannot be launched because of FANTASIA, verify that the SWI-Prolog runtime DLLs shipped alongside `UnrealEditor-FANTASIA.dll` in `FANTASIA/Binaries/Win64/` have been copied next to your project's binaries. The Prolog component loads its dependencies at editor startup; if they are missing, the plugin fails to initialize.
 

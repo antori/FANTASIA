@@ -4,31 +4,31 @@ setlocal EnableDelayedExpansion
 REM ─────────────────────────────────────────────────────────────────────────────
 REM  FANTASIA artifact fetcher (Windows)
 REM
-REM  Downloads, from the runtime-v3.0 GitHub Release, everything the FANTASIA
-REM  core plugin needs. The UE 5.8 line ships CORE-ONLY: by default this
-REM  installs the three core artifacts and nothing else.
+REM  Downloads, from the runtime-v3.0 GitHub Release, everything FANTASIA
+REM  needs. By default this installs the three core artifacts AND the NVIDIA
+REM  interactive-MetaHuman lip-sync bundles; the --no-* flags opt out.
 REM
 REM  Installed by default (core):
 REM    Whisper ASR model            -> Resources/                  (~574 MB)
 REM    Prebuilt GPU whisper stack   -> Binaries/Win64/             (~540 MB)
 REM    Win64 build-time static libs -> ThirdParty/                 (~330 MB)
 REM
-REM  Opt-in (NVIDIA interactive-MetaHuman lip-sync, NOT part of this line):
+REM  Installed by default (NVIDIA interactive-MetaHuman lip-sync):
 REM    NVIDIA ACE (A2F runtime)     -> NVIDIA-UE57-Bundle/         (~656 MB)
-REM    NVIDIA "Mark" A2F character  -> NVIDIA-UE57-Bundle/         (~1.5 GB)
-REM    NVIDIA "James" A2F character -> NVIDIA-UE57-Bundle/         (~1.5 GB)
+REM    NVIDIA "Mark" A2F character  -> NVIDIA-UE57-Bundle/         (~1.4 GB)
+REM    NVIDIA "James" A2F character -> NVIDIA-UE57-Bundle/         (~1.4 GB)
 REM    NVIDIA "Claire" A2F character-> NVIDIA-UE57-Bundle/         (~1.4 GB)
 REM
-REM  The NVIDIA bundles have not been rebuilt for UE 5.8 yet, so they are not
-REM  published in %RELEASE_TAG% and asking for them is refused with an
-REM  explanation (see NVIDIA_AVAILABLE below). They remain available on the
-REM  UE 5.7 line (the `5.7` branch, runtime-v2.0).
+REM  That is ~4.9 GB of NVIDIA bundles; --no-nvidia gives a core-only install.
 REM
-REM  When they are available, the NVIDIA ACE/Mark/James/Claire plugins (MIT +
-REM  NVIDIA Community Model License) are fetched into NVIDIA-UE57-Bundle/ and
-REM  then, if this clone sits inside a UE project's Plugins/ folder, MOVED
-REM  automatically next to FANTASIA there.
+REM  The NVIDIA ACE/Mark/James/Claire plugins (MIT + NVIDIA Community Model
+REM  License) are fetched into NVIDIA-UE57-Bundle/ and then, if this clone sits
+REM  inside a UE project's Plugins/ folder, MOVED automatically next to
+REM  FANTASIA there.
 REM  (If no Plugins/ ancestor is found, they're left staged with instructions.)
+REM  An NVIDIA plugin already present is left exactly as it is, so if this
+REM  clone installed the bundles for an EARLIER engine version, delete them
+REM  before this run or you keep the older build on a newer engine.
 REM  DLSS / Streamline are NOT bundled — NVIDIA's RTX SDK license forbids
 REM  standalone redistribution; install them from the Epic Marketplace if you
 REM  want them (not needed for lip-sync).
@@ -36,19 +36,19 @@ REM
 REM  Idempotent: files already present are skipped (size-checked); --force redoes.
 REM
 REM  Usage:
-REM    bootstrap.bat                 install the core artifacts (default)
+REM    bootstrap.bat                 install everything (default)
 REM    bootstrap.bat --no-gpu        skip the CUDA GPU whisper stack
 REM    bootstrap.bat --no-deps       skip build-time libs (Blueprint-only users)
-REM    bootstrap.bat --minimal       Whisper model only (no GPU, no deps)
-REM    bootstrap.bat --ace           also fetch the NVIDIA ACE runtime
-REM    bootstrap.bat --mark          also fetch the "Mark" character
-REM    bootstrap.bat --james         also fetch the "James" character
-REM    bootstrap.bat --claire        also fetch the "Claire" character
-REM    bootstrap.bat --characters    also fetch Mark, James and Claire
-REM    bootstrap.bat --nvidia        also fetch ACE + Mark + James + Claire
-REM    ( --no-ace / --no-mark / --no-james / --no-claire / --no-characters /
-REM      --no-nvidia are still accepted, for old command lines, and are
-REM      no-ops now that the NVIDIA bundles are opt-in. )
+REM    bootstrap.bat --minimal       Whisper model only (no GPU, deps, NVIDIA)
+REM    bootstrap.bat --no-ace        skip the NVIDIA ACE runtime
+REM    bootstrap.bat --no-mark       skip the "Mark" character
+REM    bootstrap.bat --no-james      skip the "James" character
+REM    bootstrap.bat --no-claire     skip the "Claire" character
+REM    bootstrap.bat --no-characters skip Mark, James and Claire
+REM    bootstrap.bat --no-nvidia     skip ACE + Mark + James + Claire
+REM    ( --ace / --mark / --james / --claire / --characters / --nvidia are
+REM      still accepted, for old command lines, and are no-ops now that the
+REM      NVIDIA bundles are installed by default. )
 REM    bootstrap.bat --enable-plugins  edit the project's .uproject to enable the
 REM                                    FANTASIA stack (writes a .uproject.bak first)
 REM    bootstrap.bat --force         re-download even if present
@@ -66,21 +66,25 @@ set CLAIRE_ASSET=nv-audio2face-claire-ue58.tar.gz
 
 REM Are the NVIDIA bundles published in %RELEASE_TAG% for this engine line?
 REM They are rebuilt by hand for every engine version (NVIDIA ships nothing
-REM past UE 5.6), and the UE 5.8 rebuild does not exist yet, so runtime-v3.0
-REM carries the three core assets only. Flip this to 1 in the same commit that
-REM publishes nv-ace-reference-ue58-full.tar.gz and the three
-REM nv-audio2face-*-ue58.tar.gz bundles; everything below is already wired.
-set NVIDIA_AVAILABLE=0
+REM past UE 5.6), so a new engine line carries the core assets first and the
+REM NVIDIA bundles once the hand-port is done. While this is 0 the fetches
+REM below are skipped (and an explicit NVIDIA flag is refused with an
+REM explanation); flip it to 1 in the same commit that publishes
+REM nv-ace-reference-<engine>-full.tar.gz and the three
+REM nv-audio2face-*-<engine>.tar.gz bundles.
+set NVIDIA_AVAILABLE=1
 
-REM Default: the core artifacts. The --no-* flags turn parts of the core off;
-REM the NVIDIA bundles are opt-in via --ace/--mark/--james/--claire/--nvidia.
+REM Default: everything. The --no-* flags turn individual artifacts off.
 set FETCH_MODEL=1
 set FETCH_GPU=1
 set FETCH_DEPS=1
-set FETCH_ACE=0
-set FETCH_MARK=0
-set FETCH_JAMES=0
-set FETCH_CLAIRE=0
+set FETCH_ACE=1
+set FETCH_MARK=1
+set FETCH_JAMES=1
+set FETCH_CLAIRE=1
+REM Did the command line ask for an NVIDIA bundle by name? Only then is an
+REM unpublished bundle worth refusing over; a default run just goes without.
+set NV_EXPLICIT=0
 set FORCE=0
 set ENABLE_PLUGINS=0
 set PLACED=0
@@ -99,15 +103,16 @@ if "%~1"=="" goto :args_done
 if /I "%~1"=="--no-model"      ( set "FETCH_MODEL=0" & shift & goto :parse_args )
 if /I "%~1"=="--no-gpu"        ( set "FETCH_GPU=0" & shift & goto :parse_args )
 if /I "%~1"=="--no-deps"       ( set "FETCH_DEPS=0" & shift & goto :parse_args )
-if /I "%~1"=="--ace"           ( set "FETCH_ACE=1" & shift & goto :parse_args )
-if /I "%~1"=="--mark"          ( set "FETCH_MARK=1" & shift & goto :parse_args )
-if /I "%~1"=="--james"         ( set "FETCH_JAMES=1" & shift & goto :parse_args )
-if /I "%~1"=="--claire"        ( set "FETCH_CLAIRE=1" & shift & goto :parse_args )
-if /I "%~1"=="--characters"    ( set "FETCH_MARK=1" & set "FETCH_JAMES=1" & set "FETCH_CLAIRE=1" & shift & goto :parse_args )
-if /I "%~1"=="--nvidia"        ( set "FETCH_ACE=1" & set "FETCH_MARK=1" & set "FETCH_JAMES=1" & set "FETCH_CLAIRE=1" & shift & goto :parse_args )
-REM The NVIDIA bundles are opt-in, so every --no-* form below is already the
-REM default. Accepted so that command lines and docs written for the opt-out
-REM era keep working.
+REM The NVIDIA bundles are installed by default, so every positive form below
+REM is already the default. Accepted so that command lines and docs written
+REM for the opt-in era keep working; NV_EXPLICIT records that one was named,
+REM which is what makes an unpublished bundle worth refusing over.
+if /I "%~1"=="--ace"           ( set "FETCH_ACE=1" & set "NV_EXPLICIT=1" & shift & goto :parse_args )
+if /I "%~1"=="--mark"          ( set "FETCH_MARK=1" & set "NV_EXPLICIT=1" & shift & goto :parse_args )
+if /I "%~1"=="--james"         ( set "FETCH_JAMES=1" & set "NV_EXPLICIT=1" & shift & goto :parse_args )
+if /I "%~1"=="--claire"        ( set "FETCH_CLAIRE=1" & set "NV_EXPLICIT=1" & shift & goto :parse_args )
+if /I "%~1"=="--characters"    ( set "FETCH_MARK=1" & set "FETCH_JAMES=1" & set "FETCH_CLAIRE=1" & set "NV_EXPLICIT=1" & shift & goto :parse_args )
+if /I "%~1"=="--nvidia"        ( set "FETCH_ACE=1" & set "FETCH_MARK=1" & set "FETCH_JAMES=1" & set "FETCH_CLAIRE=1" & set "NV_EXPLICIT=1" & shift & goto :parse_args )
 if /I "%~1"=="--no-ace"        ( set "FETCH_ACE=0" & shift & goto :parse_args )
 if /I "%~1"=="--no-mark"       ( set "FETCH_MARK=0" & shift & goto :parse_args )
 if /I "%~1"=="--no-james"      ( set "FETCH_JAMES=0" & shift & goto :parse_args )
@@ -118,36 +123,43 @@ if /I "%~1"=="--minimal"       ( set "FETCH_GPU=0" & set "FETCH_DEPS=0" & set "F
 if /I "%~1"=="--enable-plugins" ( set "ENABLE_PLUGINS=1" & shift & goto :parse_args )
 if /I "%~1"=="--force"         ( set "FORCE=1" & shift & goto :parse_args )
 echo Unknown argument: %~1
-echo Usage: bootstrap.bat [--no-model^|--no-gpu^|--no-deps^|--minimal] [--ace^|--mark^|--james^|--claire^|--characters^|--nvidia] [--enable-plugins] [--force]
+echo Usage: bootstrap.bat [--no-model^|--no-gpu^|--no-deps^|--minimal] [--no-ace^|--no-mark^|--no-james^|--no-claire^|--no-characters^|--no-nvidia] [--enable-plugins] [--force]
 exit /b 1
 :args_done
 
-REM ── Refuse an NVIDIA request up front, before downloading anything ───────
-REM The bundles are requested explicitly, so a clear refusal now beats a
-REM 404 from curl after a gigabyte of core artifacts has landed.
+REM ── Handle an unpublished NVIDIA bundle up front ──────────────────────────
+REM Reached only while NVIDIA_AVAILABLE=0, i.e. on an engine line whose
+REM hand-port is not in %RELEASE_TAG% yet. A default run drops the NVIDIA
+REM bundles and installs the core; a run that named one gets a clear refusal
+REM now, which beats a 404 from curl after a gigabyte of core artifacts.
 if "%NVIDIA_AVAILABLE%"=="1" goto :nvidia_ok
-set ANY_NV_REQ=0
-if "%FETCH_ACE%"=="1"    set ANY_NV_REQ=1
-if "%FETCH_MARK%"=="1"   set ANY_NV_REQ=1
-if "%FETCH_JAMES%"=="1"  set ANY_NV_REQ=1
-if "%FETCH_CLAIRE%"=="1" set ANY_NV_REQ=1
-if "%ANY_NV_REQ%"=="0" goto :nvidia_ok
+if "%NV_EXPLICIT%"=="1" goto :nvidia_refuse
+set "FETCH_ACE=0"
+set "FETCH_MARK=0"
+set "FETCH_JAMES=0"
+set "FETCH_CLAIRE=0"
 echo.
-echo  The NVIDIA ACE / Mark / James / Claire bundles are NOT available on this
-echo  line, so nothing was downloaded.
+echo  NOTE: the NVIDIA ACE / Mark / James / Claire bundles are not published for
+echo        this engine line yet, so this run installs the core only.
+goto :nvidia_ok
+
+:nvidia_refuse
+echo.
+echo  The NVIDIA ACE / Mark / James / Claire bundles are not published for this
+echo  engine line yet, so nothing was downloaded.
 echo.
 echo  Why: NVIDIA publishes its ACE plugins for UE 5.6 only, so every later
-echo  engine version needs a hand-port. The UE 5.8 port does not exist yet,
-echo  and %RELEASE_TAG% therefore carries the three core assets only.
+echo  engine version needs a hand-port. This line's port is not ready, and
+echo  %RELEASE_TAG% therefore carries the core assets only.
 echo.
 echo  What you can do:
-echo    - Run bootstrap.bat with no NVIDIA flag for a complete core install.
+echo    - Run bootstrap.bat with --no-nvidia for a complete core install.
 echo      Core FANTASIA needs none of these: ASR, LLM, TTS, Neo4j, Prolog and
 echo      the Bayesian stack all work without them. Only Audio2Face lip-sync
-echo      (the FANTASIAACE companion plugin) does, and FANTASIAACE is not
-echo      available for UE 5.8 either.
-echo    - For lip-sync today, use the UE 5.7 line: the `5.7` branch of this
-echo      repository, whose bootstrap fetches the bundles from runtime-v2.0.
+echo      (the FANTASIAACE companion plugin) does.
+echo    - For lip-sync meanwhile, use the most recent engine line whose
+echo      release does carry the bundles; the repository's branches are named
+echo      after the engine version they target.
 exit /b 1
 :nvidia_ok
 
@@ -277,7 +289,7 @@ echo Build deps staged under %TP_DIR%
 
 :after_deps
 
-REM ── Fetch NVIDIA plugins (ACE + Mark + James) into NVIDIA-UE57-Bundle/ ────
+REM ── Fetch NVIDIA plugins (ACE + Mark + James + Claire) into the staging dir ─
 set ANY_NV=0
 if "%FETCH_ACE%"=="1"   set ANY_NV=1
 if "%FETCH_MARK%"=="1"  set ANY_NV=1
@@ -287,6 +299,15 @@ REM A core-only run still needs the steps after the fetches: --enable-plugins
 REM switches the FANTASIA stack on in the .uproject whether or not any NVIDIA
 REM bundle was asked for.
 if "%ANY_NV%"=="0" goto :nv_fetch_done
+REM Every fetch below skips a plugin that is already extracted, and the move
+REM step further down leaves a copy already in Plugins\ alone. Both are right
+REM for a re-run of the same engine line and wrong for an upgrade, so say it
+REM once instead of silently keeping an older engine's build.
+echo.
+echo  NOTE: NVIDIA plugins already installed are left exactly as they are. If
+echo        this clone fetched them for an EARLIER engine version, delete them
+echo        (in NVIDIA-UE57-Bundle\ and in your project's Plugins\ folder)
+echo        before this run, or they will stay on the wrong engine version.
 if not exist "%NV_DIR%" mkdir "%NV_DIR%"
 
 REM -- ACE A2F runtime --
@@ -319,7 +340,7 @@ if "%FORCE%"=="0" if exist "%NV_DIR%\NvAudio2FaceMark\NvAudio2FaceMark.uplugin" 
 )
 set NV_TGZ=%TEMP%\%MARK_ASSET%
 echo.
-echo Downloading NVIDIA "Mark" A2F character %MARK_ASSET% ^(~1.5 GB^) ...
+echo Downloading NVIDIA "Mark" A2F character %MARK_ASSET% ^(~1.4 GB^) ...
 curl -L --fail --progress-bar -o "%NV_TGZ%" "%RELEASE_BASE%/%MARK_ASSET%"
 if %errorlevel% neq 0 ( echo ERROR: failed to download %MARK_ASSET%. & del /F /Q "%NV_TGZ%" 2>nul & exit /b 1 )
 echo Extracting into %NV_DIR% ...
@@ -339,7 +360,7 @@ if "%FORCE%"=="0" if exist "%NV_DIR%\NvAudio2FaceJames\NvAudio2FaceJames.uplugin
 )
 set NV_TGZ=%TEMP%\%JAMES_ASSET%
 echo.
-echo Downloading NVIDIA "James" A2F character %JAMES_ASSET% ^(~1.5 GB^) ...
+echo Downloading NVIDIA "James" A2F character %JAMES_ASSET% ^(~1.4 GB^) ...
 curl -L --fail --progress-bar -o "%NV_TGZ%" "%RELEASE_BASE%/%JAMES_ASSET%"
 if %errorlevel% neq 0 ( echo ERROR: failed to download %JAMES_ASSET%. & del /F /Q "%NV_TGZ%" 2>nul & exit /b 1 )
 echo Extracting into %NV_DIR% ...
@@ -437,7 +458,7 @@ echo    - (Optional) DLSS / Streamline performance: install from the Epic
 echo      Marketplace (NOT bundled; not required for lip-sync).
 echo    - Drive the face with UACERESTTTSComponent / UACEElevenLabsTTSComponent
 echo      (from FANTASIAACE).
-echo    Licensing + provenance: NV_ACE_Reference\README-FANTASIA-UE5.7-bundle.txt
+echo    Licensing + provenance: NV_ACE_Reference\README-FANTASIA-UE5.8-bundle.txt
 
 :done
 echo.
