@@ -161,20 +161,55 @@ void FBoltPackStreamWriter::WriteValue(const FBoltValuePtr& Value)
 }
 
 // ============================================================================
-// Reader — raw pointer access for multi-byte reads
+// Reader — every read bounded against the buffer before it happens
 // ============================================================================
 
+/**
+ * Deepest nesting of lists, maps and structures the reader will decode.
+ *
+ * ReadValue recurses once per enclosing container, so without a limit a message
+ * of N repeated 0x91 bytes is N stack frames. Nothing a Neo4j server builds from
+ * stored data comes close: the deepest shape the Bolt layer meets is a RECORD's
+ * field list holding a Path structure, whose node list holds a Node structure,
+ * whose property map holds a list — eight levels. 64 leaves eight times that
+ * headroom for a Cypher query returning its own nested literals, while bounding
+ * the reader's stack use to a few kilobytes.
+ */
+static constexpr int32 MaxBoltNestingDepth = 64;
+
 FBoltPackStreamReader::FBoltPackStreamReader(const TArray<uint8>& InData) : Data(InData) {}
-bool FBoltPackStreamReader::HasMore() const { return Cursor < Data.Num(); }
+bool FBoltPackStreamReader::HasMore() const { return !bRefused && Cursor < Data.Num(); }
 uint8 FBoltPackStreamReader::PeekMarker() const { return (Cursor < Data.Num()) ? Data[Cursor] : 0; }
+
+void FBoltPackStreamReader::Refuse(const FString& Reason)
+{
+	// Only the first refusal reaches here: Require() short-circuits on bRefused.
+	bRefused = true;
+	Cursor = Data.Num();
+	UE_LOG(LogTemp, Error, TEXT("BoltPackStream: refused a %d-byte message — %s"), Data.Num(), *Reason);
+}
+
+FORCEINLINE bool FBoltPackStreamReader::Require(int32 NumBytes)
+{
+	if (bRefused) return false;
+	if (NumBytes < 0 || NumBytes > Data.Num() - Cursor)
+	{
+		Refuse(FString::Printf(TEXT("needs %d more bytes at offset %d, %d remain"),
+			NumBytes, Cursor, Data.Num() - Cursor));
+		return false;
+	}
+	return true;
+}
 
 FORCEINLINE uint8 FBoltPackStreamReader::ReadByte()
 {
+	if (!Require(1)) return 0;
 	return Data.GetData()[Cursor++];
 }
 
 FORCEINLINE uint16 FBoltPackStreamReader::ReadUInt16BE()
 {
+	if (!Require(2)) return 0;
 	const uint8* P = Data.GetData() + Cursor;
 	Cursor += 2;
 	return (uint16(P[0]) << 8) | P[1];
@@ -184,6 +219,7 @@ FORCEINLINE int16 FBoltPackStreamReader::ReadInt16BE() { return static_cast<int1
 
 FORCEINLINE int32 FBoltPackStreamReader::ReadInt32BE()
 {
+	if (!Require(4)) return 0;
 	const uint8* P = Data.GetData() + Cursor;
 	Cursor += 4;
 	return (int32(P[0]) << 24) | (int32(P[1]) << 16) | (int32(P[2]) << 8) | P[3];
@@ -191,6 +227,7 @@ FORCEINLINE int32 FBoltPackStreamReader::ReadInt32BE()
 
 FORCEINLINE int64 FBoltPackStreamReader::ReadInt64BE()
 {
+	if (!Require(8)) return 0;
 	const uint8* P = Data.GetData() + Cursor;
 	Cursor += 8;
 	int64 R = 0;
@@ -208,15 +245,68 @@ FORCEINLINE double FBoltPackStreamReader::ReadFloat64BE()
 
 FString FBoltPackStreamReader::ReadStringOfLength(int32 Len)
 {
-	if (Len == 0) return TEXT("");
+	if (!Require(Len) || Len == 0) return TEXT("");
 	FUTF8ToTCHAR Conv(reinterpret_cast<const ANSICHAR*>(Data.GetData() + Cursor), Len);
 	Cursor += Len;
 	return FString(Conv.Length(), Conv.Get());
 }
 
-FBoltValuePtr FBoltPackStreamReader::ReadValue()
+FBoltValuePtr FBoltPackStreamReader::ReadList(int32 Count, int32 Depth)
+{
+	// Reject before reserving: a count larger than the bytes left cannot be met.
+	if (!Require(Count)) return FBoltValue::MakeNull();
+	FBoltValueArray Items;
+	Items.Reserve(Count);
+	for (int32 i = 0; i < Count && !bRefused; i++) Items.Add(ReadValue(Depth + 1));
+	return FBoltValue::MakeList(MoveTemp(Items));
+}
+
+FBoltValuePtr FBoltPackStreamReader::ReadMap(int32 Count, int32 Depth)
+{
+	if (!Require(Count)) return FBoltValue::MakeNull();
+	FBoltValueMap Map;
+	Map.Reserve(Count);
+	for (int32 i = 0; i < Count && !bRefused; i++)
+	{
+		auto K = ReadValue(Depth + 1);
+		Map.Add(K->StringVal, ReadValue(Depth + 1));
+	}
+	return FBoltValue::MakeMap(MoveTemp(Map));
+}
+
+FBoltValuePtr FBoltPackStreamReader::ReadStructure(int32 NumFields, int32 Depth)
+{
+	// One tag byte plus at least one byte per field.
+	if (!Require(NumFields + 1)) return FBoltValue::MakeNull();
+	const uint8 Tag = ReadByte();
+	FBoltValueArray Fields;
+	Fields.Reserve(NumFields);
+	for (int32 i = 0; i < NumFields && !bRefused; i++) Fields.Add(ReadValue(Depth + 1));
+	return FBoltValue::MakeStructure(Tag, MoveTemp(Fields));
+}
+
+FBoltValuePtr FBoltPackStreamReader::ReadValue() { return ReadValue(0); }
+
+FBoltValuePtr FBoltPackStreamReader::ReadValue(int32 Depth)
+{
+	if (bRefused) return FBoltValue::MakeNull();
+
+	if (Depth >= MaxBoltNestingDepth)
+	{
+		Refuse(FString::Printf(TEXT("nested past %d containers at offset %d"), MaxBoltNestingDepth, Cursor));
+		return FBoltValue::MakeNull();
+	}
+
+	// One funnel for every refusal: a value decoded over refused bytes is never
+	// returned, at any level of the recursion.
+	FBoltValuePtr Value = ReadMarkedValue(Depth);
+	return bRefused ? FBoltValue::MakeNull() : Value;
+}
+
+FBoltValuePtr FBoltPackStreamReader::ReadMarkedValue(int32 Depth)
 {
 	const uint8 M = ReadByte();
+	if (bRefused) return FBoltValue::MakeNull();
 
 	// Tiny int positive: 0x00-0x7F
 	if (M <= 0x7F) return FBoltValue::MakeInt(static_cast<int64>(M));
@@ -225,37 +315,12 @@ FBoltValuePtr FBoltPackStreamReader::ReadValue()
 
 	// Tiny string: 0x80-0x8F
 	if (M >= 0x80 && M <= 0x8F) return FBoltValue::MakeString(ReadStringOfLength(M & 0x0F));
-
 	// Tiny list: 0x90-0x9F
-	if (M >= 0x90 && M <= 0x9F)
-	{
-		const int32 S = M & 0x0F;
-		FBoltValueArray Items;
-		Items.Reserve(S);
-		for (int32 i = 0; i < S; i++) Items.Add(ReadValue());
-		return FBoltValue::MakeList(MoveTemp(Items));
-	}
-
+	if (M >= 0x90 && M <= 0x9F) return ReadList(M & 0x0F, Depth);
 	// Tiny map: 0xA0-0xAF
-	if (M >= 0xA0 && M <= 0xAF)
-	{
-		const int32 S = M & 0x0F;
-		FBoltValueMap Map;
-		Map.Reserve(S);
-		for (int32 i = 0; i < S; i++) { auto K = ReadValue(); Map.Add(K->StringVal, ReadValue()); }
-		return FBoltValue::MakeMap(MoveTemp(Map));
-	}
-
+	if (M >= 0xA0 && M <= 0xAF) return ReadMap(M & 0x0F, Depth);
 	// Tiny structure: 0xB0-0xBF
-	if (M >= 0xB0 && M <= 0xBF)
-	{
-		const int32 N = M & 0x0F;
-		const uint8 Tag = ReadByte();
-		FBoltValueArray Fields;
-		Fields.Reserve(N);
-		for (int32 i = 0; i < N; i++) Fields.Add(ReadValue());
-		return FBoltValue::MakeStructure(Tag, MoveTemp(Fields));
-	}
+	if (M >= 0xB0 && M <= 0xBF) return ReadStructure(M & 0x0F, Depth);
 
 	switch (M)
 	{
@@ -272,6 +337,7 @@ FBoltValuePtr FBoltPackStreamReader::ReadValue()
 	case 0xCC: case 0xCD: case 0xCE:
 	{
 		const int32 Len = (M == 0xCC) ? ReadByte() : (M == 0xCD) ? ReadUInt16BE() : ReadInt32BE();
+		if (!Require(Len)) return FBoltValue::MakeNull();
 		auto V = MakeShared<FBoltValue>();
 		V->Type = EBoltValueType::Bytes;
 		V->BytesVal.Append(Data.GetData() + Cursor, Len);
@@ -280,29 +346,19 @@ FBoltValuePtr FBoltPackStreamReader::ReadValue()
 	}
 
 	// String8/16/32
-	case 0xD0: return FBoltValue::MakeString(ReadStringOfLength(ReadByte()));
-	case 0xD1: return FBoltValue::MakeString(ReadStringOfLength(ReadUInt16BE()));
-	case 0xD2: return FBoltValue::MakeString(ReadStringOfLength(ReadInt32BE()));
+	case 0xD0: case 0xD1: case 0xD2:
+	{
+		const int32 Len = (M == 0xD0) ? ReadByte() : (M == 0xD1) ? ReadUInt16BE() : ReadInt32BE();
+		return FBoltValue::MakeString(ReadStringOfLength(Len));
+	}
 
 	// List8/16/32
 	case 0xD4: case 0xD5: case 0xD6:
-	{
-		const int32 S = (M == 0xD4) ? ReadByte() : (M == 0xD5) ? ReadUInt16BE() : ReadInt32BE();
-		FBoltValueArray Items;
-		Items.Reserve(S);
-		for (int32 i = 0; i < S; i++) Items.Add(ReadValue());
-		return FBoltValue::MakeList(MoveTemp(Items));
-	}
+		return ReadList((M == 0xD4) ? ReadByte() : (M == 0xD5) ? ReadUInt16BE() : ReadInt32BE(), Depth);
 
 	// Map8/16/32
 	case 0xD8: case 0xD9: case 0xDA:
-	{
-		const int32 S = (M == 0xD8) ? ReadByte() : (M == 0xD9) ? ReadUInt16BE() : ReadInt32BE();
-		FBoltValueMap Map;
-		Map.Reserve(S);
-		for (int32 i = 0; i < S; i++) { auto K = ReadValue(); Map.Add(K->StringVal, ReadValue()); }
-		return FBoltValue::MakeMap(MoveTemp(Map));
-	}
+		return ReadMap((M == 0xD8) ? ReadByte() : (M == 0xD9) ? ReadUInt16BE() : ReadInt32BE(), Depth);
 
 	default:
 		UE_LOG(LogTemp, Error, TEXT("BoltPackStream: Unknown marker 0x%02X at offset %d"), M, Cursor - 1);

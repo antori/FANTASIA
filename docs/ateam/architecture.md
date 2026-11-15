@@ -1,7 +1,7 @@
 # Architecture: FANTASIA
 - Design version: 4
 - Status: approved
-- As of: J-0129
+- As of: J-0165
 - Approved: yes
 - Origin: adopted 2026-11-12
 
@@ -78,7 +78,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Turn text into audio through an HTTP service and play it back in request order as it streams, with ElevenLabs as the shipped implementation.
 - Paths: FANTASIA/Source/FANTASIA/Public/RESTTTSComponent.h, FANTASIA/Source/FANTASIA/Private/RESTTTSComponent.cpp, FANTASIA/Source/FANTASIA/Public/ElevenLabsTTSComponent.h, FANTASIA/Source/FANTASIA/Private/ElevenLabsTTSComponent.cpp, FANTASIA/Source/FANTASIA/Public/ElevenLabsProtocol.h, FANTASIA/Source/FANTASIA/Private/ElevenLabsProtocol.cpp
 - Language: cpp
-- Satisfies: US-005, US-006, US-007, US-028, NFR-002, NFR-004
+- Satisfies: US-005, US-006, US-007, US-028, US-034, NFR-002, NFR-004
 - Depends on: M-core
 - Provides: C-rest-tts, C-elevenlabs-protocol
 - Consumes: C-fantasia-types
@@ -91,7 +91,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Reach a language model or an agent graph over HTTP and deliver its answer, streaming or whole.
 - Paths: FANTASIA/Source/FANTASIA/Public/OpenAICompatibleComponent.h, FANTASIA/Source/FANTASIA/Private/OpenAICompatibleComponent.cpp, FANTASIA/Source/FANTASIA/Public/LangGraphComponent.h, FANTASIA/Source/FANTASIA/Private/LangGraphComponent.cpp
 - Language: cpp
-- Satisfies: US-008, US-009, US-028, NFR-004
+- Satisfies: US-008, US-009, US-028, US-034, NFR-004
 - Depends on: M-core
 - Provides: C-llm
 - Consumes: C-fantasia-types
@@ -182,7 +182,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Pin current behaviour through the engine's automation framework, as the project's only mechanical verification, and observe component independence. It satisfies only the stories whose deliverable *is* a test: a story about behaviour belongs to the module that behaves, and NFR-004 is observed here without being satisfied here.
 - Paths: FANTASIA/Source/FANTASIATests/Public/, FANTASIA/Source/FANTASIATests/Private/
 - Language: cpp
-- Satisfies: US-028, US-029, US-030, US-031, US-032, US-033
+- Satisfies: US-028, US-029, US-030, US-031, US-032, US-033, US-034
 - Depends on: M-core, M-asr, M-tts, M-llm, M-prolog, M-probabilistic, M-ml, M-neo4j, M-dist
 - Provides: none
 - Consumes: C-fantasia-types, C-asr, C-rest-tts, C-elevenlabs-protocol, C-llm, C-prolog, C-probabilistic, C-math, C-neo4j, C-build
@@ -195,7 +195,7 @@ repository. Vendored third-party code is outside it (see Unmapped areas).
 - Responsibility: Decide how the plugins are compiled, linked, staged and installed, and how a user gets from a clone to a running plugin.
 - Paths: FANTASIA/Source/FANTASIA/FANTASIA.Build.cs, FANTASIA/Source/FANTASIATests/FANTASIATests.Build.cs, FANTASIAACE/Source/FANTASIAACE/FANTASIAACE.Build.cs, FANTASIA/FANTASIA.uplugin, FANTASIAACE/FANTASIAACE.uplugin, FANTASIA/bootstrap.bat, FANTASIA/bootstrap.sh, FANTASIA/build_whisper_cuda.bat, FANTASIA/build_whisper_cuda.sh, FANTASIA/setup_whisper.bat, FANTASIA/setup_whisper.ps1, FANTASIA/setup_whisper.sh, FANTASIA/enable-plugins.ps1, FANTASIA/run-tests.ps1, FANTASIA/Binaries/, FANTASIAACE/Binaries/, README.md, THIRD_PARTY_LICENSES.md, LICENSE, .gitignore, .gitattributes
 - Language: csharp
-- Satisfies: US-018, US-019, US-020, US-021, US-022, US-027, NFR-005
+- Satisfies: US-018, US-019, US-020, US-021, US-022, US-027, US-031, NFR-005
 - Depends on: none
 - Provides: C-build, C-install
 - Consumes: none

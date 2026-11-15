@@ -4,35 +4,34 @@
 - Language: cpp
 - Reviewer: reviewer
 - Tester: tester
-- As of: J-0059
-## This sprint (S-01)
+- As of: J-0165
+## This sprint (S-02)
 
-Two tasks, both deliberately tiny, in two different modules:
+One task: **T-30** (US-034, M-tts) — one sentence in `URESTTTSComponent::Headers`'s doc
+comment, closing F-033 (minor, quality). `LoadConfig` reads the ini section of the
+*instance's own class*, so a `Headers` line under `[/Script/FANTASIA.RESTTTSComponent]`
+reaches a plain `URESTTTSComponent` and nothing else; a `UACERESTTTSComponent` reads
+`[/Script/FANTASIAACE.ACERESTTTSComponent]`. The tooltip added in S-01 says the value comes
+from `DefaultGame.ini` and names no section, so a user who follows it on the ACE subclass
+gets no key, no error and an unauthenticated request.
 
-**T-05 (US-028, M-tts)** — add the `Config` specifier to `URESTTTSComponent::Headers` and
-say in its doc comment where the value now comes from. This is F-008's second half, and
-`Headers` is exactly where an `xi-api-key` goes, between `URL` and `BodyTemplate`, which
-both carry `Config` already. Examined hardest:
+What the reviewer examines hardest:
 
-1. **A `TMap` is not a string.** `Config` on a map property is not as obvious as on the
-   two properties either side of it, so the doc comment must show a user how the entries
-   are written in `DefaultGame.ini`, and T-03's test must prove a real reload puts them on
-   the instance. Do not assume it works because the neighbours do — that assumption is
-   what F-008 is.
-2. **The specifier alone is not the fix.** An asset that already holds a key keeps it
-   until it is re-saved; the doc comment says so, because it is the tooltip the user reads.
-3. **Nothing else in the header moved**: same name, type, category and `EditAnywhere,
-   BlueprintReadWrite` specifiers, which is the P-19 clause that admits this at all.
-4. **P-07, hard.** F-009 and F-003 are both in this owner's paths and both change
-   contracts. Not this sprint, not while passing through.
+1. **The sentence states the rule, not just the exception.** "The section of the instance's
+   own class" is what a reader needs in order to work out their own subclass; naming only
+   the ACE class leaves every Blueprint subclass unexplained, and the same behaviour applies
+   to every inherited `Config` property in the plugin.
+2. **The ACE section is given literally**, because that is the class where the exposure is
+   real. `UElevenLabsTTSComponent` does not use `Headers` at all — `BuildRequest` takes
+   `Key` — so its own exposure is nil and saying otherwise would be wrong.
+3. **The comment is the whole diff**: same name, type, category and specifiers, so no
+   compiled Blueprint asset is invalidated and P-19 admits it.
+4. **P-07.** F-009, F-003, F-023 and F-030 are all in this owner's paths and all change
+   contracts or behaviour. Not this sprint, not while passing through.
 
-**T-06 (US-029, M-asr)** — add one `friend` declaration to `WhisperCaptureComponent.h` so
-that T-07 can characterise the private audio front end. Examined hardest: that it is one
-declaration and nothing else — no member moved from private to public, no helper extracted,
-no signature changed, so no exported surface and no part of C-asr changes. The seam exists
-because the behaviour worth pinning (the resampler, the RMS, the high-pass coefficients,
-the noise gate) is private, and widening the real surface to reach it would be a contract
-change P-19 keeps off this line.
+US-033 — the capture seam that closes F-018 — is `ready` and is **not** in this sprint. It
+is M-asr, it does not serve the sprint's goal, and it stays at the head of the S-03
+candidates.
 
 ## Reviewer checklist
 

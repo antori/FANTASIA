@@ -7,6 +7,7 @@
 #include "BoltProtocol.h"
 #include "WebSocketsModule.h"
 #include "Async/Async.h"
+#include "Misc/Paths.h"
 
 // OpenSSL's ossl_typ.h defines 'UI' which conflicts with UE's UI namespace
 #define UI UI_ST
@@ -14,6 +15,7 @@ THIRD_PARTY_INCLUDES_START
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
+#include <openssl/x509v3.h>
 THIRD_PARTY_INCLUDES_END
 #undef UI
 
@@ -40,6 +42,33 @@ static FString GetMetadataString(const FBoltValueMap& Metadata, const TCHAR* Key
 		if (*Ptr) return (*Ptr)->AsString();
 	}
 	return DefaultValue;
+}
+
+/**
+ * The PEM bundle the certificate chain is verified against, or empty if there is none.
+ *
+ * This is the engine's own trust store, found the way the engine's TLS stack finds it: the
+ * host project's `Content/Certificates/cacert.pem` if it has one, otherwise the bundle that
+ * ships with the engine. OpenSSL's `SSL_CTX_set_default_verify_paths` is not the
+ * alternative it looks like — on Windows it resolves to a compiled-in OPENSSLDIR that the
+ * engine's static build never populates, and it does not read the Windows certificate store
+ * at all, so it would load nothing and every verified connection would fail. Taking the
+ * engine's bundle instead means a server the engine's own HTTPS trusts is a server this
+ * component trusts, there is one answer per project rather than two, and the project path
+ * is where a site adds a private or corporate root.
+ */
+static FString ResolveTrustStorePath()
+{
+	const FString Candidates[] =
+	{
+		FPaths::ProjectContentDir() / TEXT("Certificates/cacert.pem"),
+		FPaths::EngineContentDir() / TEXT("Certificates/ThirdParty/cacert.pem")
+	};
+	for (const FString& Candidate : Candidates)
+	{
+		if (FPaths::FileExists(Candidate)) return Candidate;
+	}
+	return FString();
 }
 
 /** Copy a Bolt property map into a UObject string→string map with reserve + list join. */
@@ -73,6 +102,9 @@ UNeo4jComponent::UNeo4jComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	port = 7687;
+	// The receive path is well defined before any connection: InitiateConnection
+	// resets this dechunker rather than replacing it.
+	Dechunker = MakeUnique<FBoltDechunker>();
 }
 
 // ============================================================================
@@ -105,6 +137,109 @@ bool UNeo4jComponent::SchemeRequiresRouting(const FString& Url)
 	return Url.StartsWith(TEXT("neo4j://")) || Url.StartsWith(TEXT("neo4j+s://")) || Url.StartsWith(TEXT("neo4j+ssc://"));
 }
 
+FNeo4jTlsDecision UNeo4jComponent::DecideTransportSecurity(
+	const FString& SchemeUrl, const FString& TargetHost, EBoltTransport InTransport, bool bConfiguredUseSSL)
+{
+	// Framing does not change the promise; see the declaration for why it is still an
+	// argument. Named and discarded rather than left out, so that the test matrix can
+	// assert the promise over both and a reader is not left wondering.
+	(void)InTransport;
+
+	FNeo4jTlsDecision Decision;
+	Decision.Hostname = ExtractHostname(TargetHost);
+
+	if (SchemeUrl.StartsWith(TEXT("bolt+ssc://")) || SchemeUrl.StartsWith(TEXT("neo4j+ssc://")))
+	{
+		// The documented opt-out: encrypted, peer unauthenticated, by request. Tested
+		// first because ShouldUseSSL answers true for these schemes as well.
+		Decision.bEncrypt = true;
+	}
+	else if (ShouldUseSSL(SchemeUrl))
+	{
+		// bolt+s://, neo4j+s://, https://, wss:// — what Neo4j's documentation says these
+		// mean, and what F-020 was: encrypted and verified, chain and name both.
+		Decision.bEncrypt = true;
+		Decision.bVerifyChain = true;
+		Decision.bVerifyHostname = true;
+	}
+	else if (SchemeUrl.StartsWith(TEXT("bolt://"))
+		|| SchemeUrl.StartsWith(TEXT("http://")) || SchemeUrl.StartsWith(TEXT("ws://")))
+	{
+		// Plaintext by scheme. Nothing to verify, because nothing is encrypted.
+	}
+	else
+	{
+		// neo4j://, and an endpoint whose scheme is not recognised: the property decides,
+		// which is the case US-032 removes. An encrypted connection reached this way is
+		// fully verified — only `+ssc` opts out of verification, and it says so.
+		Decision.bEncrypt = bConfiguredUseSSL;
+		Decision.bVerifyChain = bConfiguredUseSSL;
+		Decision.bVerifyHostname = bConfiguredUseSSL;
+	}
+
+	return Decision;
+}
+
+bool UNeo4jComponent::ApplyTlsVerification(void* SslCtxHandle, const FNeo4jTlsDecision& Security, FString& OutFailure)
+{
+	OutFailure.Empty();
+
+	SSL_CTX* Ctx = static_cast<SSL_CTX*>(SslCtxHandle);
+	if (!Ctx)
+	{
+		OutFailure = TEXT("there is no TLS context to verify with");
+		return false;
+	}
+
+	if (!Security.bVerifyChain)
+	{
+		// `+ssc`. OpenSSL's default for a fresh context is already SSL_VERIFY_NONE; it is
+		// set here so that the context states the decision rather than inheriting it.
+		SSL_CTX_set_verify(Ctx, SSL_VERIFY_NONE, nullptr);
+		return true;
+	}
+
+	if (Security.bVerifyHostname && Security.Hostname.IsEmpty())
+	{
+		// Verification against no name is verification against anything.
+		OutFailure = TEXT("there is no hostname to check the certificate against");
+		return false;
+	}
+
+	const FString TrustStore = ResolveTrustStorePath();
+	if (TrustStore.IsEmpty())
+	{
+		OutFailure = TEXT("no certificate bundle was found, either in this project's Content/Certificates or in the engine's");
+		return false;
+	}
+	if (SSL_CTX_load_verify_locations(Ctx, TCHAR_TO_UTF8(*TrustStore), nullptr) != 1)
+	{
+		// A load that fails silently is F-020 again with more code in it.
+		OutFailure = FString::Printf(TEXT("the certificate bundle '%s' could not be loaded"), *TrustStore);
+		return false;
+	}
+
+	SSL_CTX_set_verify(Ctx, SSL_VERIFY_PEER, nullptr);
+
+	if (Security.bVerifyHostname)
+	{
+		X509_VERIFY_PARAM* Param = SSL_CTX_get0_param(Ctx);
+
+		// Partial wildcards ("f*.example.com") off: RFC 6125 discourages them and no
+		// Neo4j deployment needs them. A full leftmost wildcard ("*.example.com") still
+		// matches, which is what Aura serves.
+		X509_VERIFY_PARAM_set_hostflags(Param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+
+		if (X509_VERIFY_PARAM_set1_host(Param, TCHAR_TO_UTF8(*Security.Hostname), 0) != 1)
+		{
+			OutFailure = FString::Printf(TEXT("the hostname '%s' could not be set for verification"), *Security.Hostname);
+			return false;
+		}
+	}
+
+	return true;
+}
+
 // ============================================================================
 // Lifecycle
 // ============================================================================
@@ -135,24 +270,32 @@ void UNeo4jComponent::BeginPlay()
 void UNeo4jComponent::InitiateConnection(const FString& Hostname, int32 InPort)
 {
 	// Reset per-connection state (chunker, handshake buffer, phase flags).
-	Dechunker = MakeUnique<FBoltDechunker>();
+	Dechunker->Reset();
+	UnresolvedMessageBytes = 0;
 	HandshakeBuffer.Empty();
 	QueryPhase = EBoltQueryPhase::Idle;
 	RoutingPhase = EBoltRoutingPhase::Idle;
 	NegotiatedBoltMajor = 0;
 	NegotiatedBoltMinor = 0;
 
-	ActiveHostname = Hostname;
 	ActivePort = InPort;
-	bActiveTls = UseSSL;
+
+	// Once per connection. The scheme comes from the configured endpoint, because that is
+	// where the user's intent is written; the host comes from this call's argument, which
+	// on a routing reconnect is the backend the *server* named. Keeping them apart here is
+	// what stops the certificate of one host being checked against the name of another.
+	ActiveSecurity = DecideTransportSecurity(endpoint, Hostname, Transport, UseSSL);
 
 	if (Transport == EBoltTransport::PlainTCP)
 	{
 		++ConnectionEpoch;
 		UE_LOG(LogTemp, Log, TEXT("Neo4j: Connecting via %s to %s:%d"),
-			bActiveTls ? TEXT("TCP+TLS") : TEXT("plain TCP"), *Hostname, InPort);
+			!ActiveSecurity.bEncrypt ? TEXT("plain TCP")
+				: ActiveSecurity.bVerifyChain ? TEXT("TCP+TLS, server verified")
+				: TEXT("TCP+TLS, server NOT verified (+ssc)"),
+			*ActiveSecurity.Hostname, InPort);
 		ConnectionState = EBoltConnectionState::Connecting;
-		TcpConnect(Hostname, InPort, bActiveTls);
+		TcpConnect(ActiveSecurity, InPort);
 	}
 	else
 	{
@@ -178,13 +321,25 @@ void UNeo4jComponent::InitiateConnection(const FString& Hostname, int32 InPort)
 		}
 		else
 		{
-			WsUrl = (bActiveTls ? TEXT("wss://") : TEXT("ws://")) + WsUrl;
+			WsUrl = (ActiveSecurity.bEncrypt ? TEXT("wss://") : TEXT("ws://")) + WsUrl;
 		}
 
 		// Honor UseSSL even when the scheme didn't already imply TLS — upgrades
 		// ws:// → wss:// when the user explicitly opted into encryption.
-		if (bActiveTls && WsUrl.StartsWith(TEXT("ws://")))
+		if (ActiveSecurity.bEncrypt && WsUrl.StartsWith(TEXT("ws://")))
 			WsUrl = TEXT("wss://") + WsUrl.Mid(5);
+
+		// The decision is the same for both framings, but only the plain TCP transport can
+		// carry out the `+ssc` half of it: the WebSocket client verifies the chain itself
+		// and offers no way to relax that, so a self-signed server is unreachable here and
+		// the message says which transport to use rather than leaving a failed handshake
+		// to explain itself.
+		if (ActiveSecurity.bEncrypt && !ActiveSecurity.bVerifyChain)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("Neo4j: '+ssc' accepts a self-signed certificate on the Plain TCP transport only; ")
+				TEXT("over WebSocket the server's certificate is verified regardless."));
+		}
 
 		// Force loopback to IPv4. Neo4j Desktop and most local installs on Windows
 		// bind only 0.0.0.0:7687 (IPv4), but modern Windows getaddrinfo resolves
@@ -311,11 +466,12 @@ private:
 	UNeo4jComponent* Owner;
 };
 
-void UNeo4jComponent::TcpConnect(const FString& Hostname, int32 InPort, bool bUseTls)
+void UNeo4jComponent::TcpConnect(const FNeo4jTlsDecision& Security, int32 InPort)
 {
 	BIO* Bio = nullptr;
+	const FString& Hostname = Security.Hostname;
 
-	if (bUseTls)
+	if (Security.bEncrypt)
 	{
 		// TLS path: SSL_CTX wraps a connect BIO so OpenSSL handles DNS, TCP
 		// connect, and TLS handshake in a single chain.
@@ -327,6 +483,23 @@ void UNeo4jComponent::TcpConnect(const FString& Hostname, int32 InPort, bool bUs
 			return;
 		}
 		SslCtx = Ctx;
+
+		// Before the BIO, because the SSL the chain creates inherits the context's verify
+		// mode and verification parameters at creation and not afterwards. A refusal here
+		// returns with no socket opened, so the connection does not exist and the LOGON
+		// that would carry `user` and `password` is unreachable.
+		FString Failure;
+		if (!ApplyTlsVerification(Ctx, Security, Failure))
+		{
+			UE_LOG(LogTemp, Error,
+				TEXT("Neo4j: refusing to connect to %s over TLS because %s. No connection was opened ")
+				TEXT("and no credentials were sent. Use 'bolt+ssc://' or 'neo4j+ssc://' if you intend ")
+				TEXT("to accept a self-signed certificate."),
+				*Hostname, *Failure);
+			SSL_CTX_free(Ctx); SslCtx = nullptr;
+			ConnectionState = EBoltConnectionState::Failed;
+			return;
+		}
 
 		Bio = BIO_new_ssl_connect(Ctx);
 		if (!Bio)
@@ -384,18 +557,58 @@ void UNeo4jComponent::TcpConnect(const FString& Hostname, int32 InPort, bool bUs
 		return;
 	}
 
-	if (bUseTls)
+	if (Security.bEncrypt)
 	{
+		// Non-null: the block above returns if BIO_get_ssl did not yield a handle.
+		SSL* const Ssl = static_cast<SSL*>(SslHandle);
+
 		if (BIO_do_handshake(Bio) <= 0)
 		{
-			unsigned long ErrCode = ERR_get_error();
-			char ErrBuf[256];
-			ERR_error_string_n(ErrCode, ErrBuf, sizeof(ErrBuf));
-			UE_LOG(LogTemp, Error, TEXT("Neo4j: TLS handshake failed: %hs"), ErrBuf);
+			// With SSL_VERIFY_PEER this is the branch a rejected certificate takes, so it
+			// is the branch that has to explain itself. SSL_get_verify_result is set even
+			// on an aborted handshake and names the check that failed — an untrusted
+			// issuer and a name mismatch are different problems with different remedies.
+			const long VerifyResult = SSL_get_verify_result(Ssl);
+			if (Security.bVerifyChain && VerifyResult != X509_V_OK)
+			{
+				UE_LOG(LogTemp, Error,
+					TEXT("Neo4j: refusing the server at %s: its certificate failed verification — %hs. ")
+					TEXT("No credentials were sent. Trust store: '%s'. If this server uses a self-signed ")
+					TEXT("certificate, change the endpoint's scheme to 'bolt+ssc://' (or 'neo4j+ssc://'), ")
+					TEXT("which accepts one."),
+					*ConnTarget, X509_verify_cert_error_string(VerifyResult), *ResolveTrustStorePath());
+			}
+			else
+			{
+				unsigned long ErrCode = ERR_get_error();
+				char ErrBuf[256];
+				ERR_error_string_n(ErrCode, ErrBuf, sizeof(ErrBuf));
+				UE_LOG(LogTemp, Error, TEXT("Neo4j: TLS handshake failed: %hs"), ErrBuf);
+			}
 			TcpDisconnect();
+			ConnectionState = EBoltConnectionState::Failed;
 			return;
 		}
-		UE_LOG(LogTemp, Log, TEXT("Neo4j: TLS connected to %s"), *ConnTarget);
+
+		// The handshake succeeding is not the same claim as the certificate being
+		// verified: it is only the same claim when the context was built to verify, which
+		// is exactly what F-020 was wrong about. So the result is inspected rather than
+		// inferred, and a context that reached this point without verifying refuses here.
+		const long VerifyResult = SSL_get_verify_result(Ssl);
+		if (Security.bVerifyChain && VerifyResult != X509_V_OK)
+		{
+			UE_LOG(LogTemp, Error,
+				TEXT("Neo4j: refusing the server at %s: the TLS handshake completed but the certificate ")
+				TEXT("is not verified — %hs. No credentials were sent. Use 'bolt+ssc://' or ")
+				TEXT("'neo4j+ssc://' to accept a self-signed certificate deliberately."),
+				*ConnTarget, X509_verify_cert_error_string(VerifyResult));
+			TcpDisconnect();
+			ConnectionState = EBoltConnectionState::Failed;
+			return;
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("Neo4j: TLS connected to %s (%s)"), *ConnTarget,
+			Security.bVerifyChain ? TEXT("certificate verified") : TEXT("certificate NOT verified, +ssc"));
 	}
 	else
 	{
@@ -559,11 +772,31 @@ void UNeo4jComponent::OnDataReceived(const void* Data, SIZE_T Size)
 		return;
 	}
 
+	// Bound the in-flight message before handing the bytes over: the dechunker
+	// accumulates chunks until a zero-length terminator arrives and has no limit
+	// of its own, so a server that never terminates a message would grow its
+	// buffer until the process died. Checked before the Append, not after it.
+	// The partial message is discarded; what the component enforces is therefore
+	// MaxBoltMessageBytes plus at most one transport read (16 KiB on the TCP path).
+	if (static_cast<int64>(UnresolvedMessageBytes) + static_cast<int64>(Size) > MaxBoltMessageBytes)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("Neo4j: discarding an incomplete Bolt message — %d bytes arrived without the ")
+			TEXT("zero-length chunk that ends a message, past the %d-byte limit. The server is ")
+			TEXT("faulty or not speaking Bolt; no result is reported for it."),
+			UnresolvedMessageBytes, MaxBoltMessageBytes);
+		Dechunker->Reset();
+		UnresolvedMessageBytes = 0;
+		return;
+	}
+	UnresolvedMessageBytes += static_cast<int32>(Size);
+
 	Dechunker->Accumulate(Data, Size);
 
 	TArray<uint8> MsgData;
 	while (Dechunker->PopMessage(MsgData))
 	{
+		UnresolvedMessageBytes = 0;
 		FBoltServerMessage Msg = ParseBoltServerMessage(MsgData);
 		HandleServerMessage(Msg);
 	}
@@ -592,7 +825,7 @@ void UNeo4jComponent::OnWebSocketConnectionError(int32 Epoch, const FString& Err
 		TEXT("Neo4j: WebSocket connect failed pre-handshake. URL=ws://%s:%d, libwebsockets error='%s'. ")
 		TEXT("Check (in order): server actually listening on that port (netstat), firewall/AV blocking loopback, ")
 		TEXT("server requires TLS (try Use SSL=true), or WebSocket transport disabled server-side."),
-		*ActiveHostname, ActivePort, *Error);
+		*ActiveSecurity.Hostname, ActivePort, *Error);
 	ConnectionState = EBoltConnectionState::Closed;
 }
 

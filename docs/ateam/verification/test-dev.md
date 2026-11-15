@@ -4,48 +4,36 @@
 - Language: cpp
 - Reviewer: reviewer
 - Tester: tester
-- As of: J-0059
-## This sprint (S-01)
+- As of: J-0165
+## This sprint (S-02)
 
-Two tasks, and both are what the sprint is for: this sprint is conformance and
-characterisation, so this coder writes the evidence everything else is judged by.
+One task: **T-31** (US-034, `Private/SecretConfigTests.cpp`, the file this coder wrote in
+S-01) — two assertions that the two doc-comment sentences T-29 and T-30 add are actually
+there, read off the engine's reflected metadata.
 
-**T-03 (US-028, `Private/SecretConfigTests.cpp`, new file)** — pin the `Config` flag of
-every secret-bearing property in the plugin, all six: the two that lack it today
-(`UOpenAICompatibleComponent::Config`, `URESTTTSComponent::Headers`) and the four that
-have it (`UElevenLabsTTSComponent::Key`, `UNeo4jComponent::password`,
-`URESTTTSComponent::URL`, `URESTTTSComponent::BodyTemplate`). Written **before** the two
-fixes, so it begins as a failing test marked expected against F-008, and the fixes are
-what turn it green. Examined hardest:
+This is the suite's first test of property *documentation*, so the shape is new and the task
+has to establish it rather than follow a precedent:
 
-1. The flag is read off the class's reflected property, not inferred from a value, so the
-   test cannot pass because something happened to be set.
-2. The reload case proves serialisation for a struct property and for a map property —
-   the two shapes nobody has verified — rather than asserting back a value the test wrote
-   to the object.
-3. No real key, no write to the user's `DefaultGame.ini`, nothing left behind in `GConfig`
-   after the test (P-15: a test fixture holding a credential is a leak with extra steps).
-4. This file is a standing guard, so it is written to be extended: a new secret-bearing
-   property should be one line to add.
+1. **The assertion reads the engine's metadata, not the source file.** UHT writes a raw
+   `Comment` and a formatted `ToolTip`; whether a `@note` paragraph survives into `ToolTip`
+   is not documented anywhere, so the task finds out which key carries the sentence, asserts
+   on that one, and states in a DEC which it was. A test that greps the header is not a test
+   of what the editor shows a user.
+2. **It fails when the sentence is removed.** Demonstrated once, locally, by removing it and
+   reporting the failure — not argued. A metadata assertion that passes against an empty
+   tooltip is the same trap as a `Config` assertion that passes because something set a
+   value, which is what this very file exists to avoid.
+3. **Metadata is editor-only data.** The gate runs the editor, so it is available where the
+   test runs; the task should say so rather than leave a reader wondering whether the
+   assertion is compiled out of some other target.
+4. **Narrow literals.** `Apply Provider Preset` and `[/Script/` are the whole of what is
+   pinned. A longer substring pins the prose style of a sentence rather than its content and
+   will break on the first harmless rewording.
+5. **Nothing left behind.** The file's existing rule holds: no real key, no write to the
+   user's `DefaultGame.ini`, nothing in `GConfig` after the test (P-15).
 
-**T-07 (US-029, `Private/WhisperCaptureComponentTests.cpp`, new file, after T-06's seam)**
-— characterise the microphone capture path: the largest file in the project, 1250 lines,
-a real-time path with threading and no test at all (F-007). Examined hardest:
-
-1. **Characterisation, not correction.** Every assertion pins what the code does today. A
-   value that looks wrong is pinned as it is and reported as a finding; "fixing" it here
-   is the neighbourhood (P-07) and would also hide a behaviour change inside a test commit.
-2. **No device, no model, no network, under a second.** A test that needs a microphone
-   fails on a machine without one and teaches people to ignore red.
-3. The seam is used to *read* private state, not to drive the component into a state the
-   public API cannot reach and then assert on it — that pins an accident.
-4. Each test's name says which C-asr claim it pins, because C-asr currently ends by
-   admitting that every invariant without a test name beside it is read from the code
-   rather than pinned, and this task is how that sentence starts shrinking.
-
-Not in reach this sprint, and not a gap to feel bad about: the Bolt message layer. F-012
-makes it unlinkable from here and the export is a C-neo4j change P-19 keeps off the 5.8
-line.
+US-033's two tests — the ones US-029's device-failure criterion was withdrawn into — are
+`ready` and **not** in this sprint.
 
 ## Reviewer checklist
 

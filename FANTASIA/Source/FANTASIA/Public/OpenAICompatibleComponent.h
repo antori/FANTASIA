@@ -91,6 +91,12 @@ public:
 	 *
 	 * @note  An asset that already holds a key still holds it. Clear the value in the
 	 *        asset and re-save it for the key to leave the asset.
+	 *
+	 * @note  The Blueprint node "Apply Provider Preset" replaces this whole configuration,
+	 *        APIKey included, and no preset carries a key — so a key read from
+	 *        `DefaultGame.ini` is discarded by that call. To keep the key in configuration,
+	 *        skip that node and set the endpoint fields in the same `DefaultGame.ini` entry
+	 *        as the key.
 	 */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "LLM|Configuration")
 	FOpenAICompatibleConfig Config;
@@ -127,6 +133,18 @@ public:
 
 	/**
 	 * @brief Overwrites Config with the built-in preset for the given provider.
+	 *
+	 * The Blueprint node is "Apply Provider Preset". It replaces Config wholesale,
+	 * APIKey included, and no preset carries a key: a key read from `DefaultGame.ini`
+	 * is discarded by the call, and the next Get Chat Completion logs "API key is
+	 * required but empty" while bRequiresAuth is true. Provider Custom is the
+	 * exception and leaves Config untouched.
+	 *
+	 * Setting the key again after the preset makes it a literal in a Blueprint graph,
+	 * which is committed. To keep the key in configuration, skip this node and set the
+	 * endpoint fields in the same `DefaultGame.ini` entry as the key; the values are
+	 * the ones Make OpenAI Config and its siblings return.
+	 *
 	 * @param Provider The LLM provider whose defaults should be applied.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "LLM|Configuration", meta = (DisplayName = "Apply Provider Preset"))

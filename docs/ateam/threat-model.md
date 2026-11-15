@@ -1,5 +1,5 @@
 # Threat model
-- As of: J-0137
+- As of: J-0211
 - Owner: security
 - Scope: design version 3; all twelve modules (M-core, M-asr, M-tts, M-llm, M-prolog, M-probabilistic, M-ml, M-neo4j, M-ace, M-demo, M-tests, M-dist); no services — FANTASIA is a library loaded into someone else's process
 
@@ -24,10 +24,10 @@ duty is where the project is weakest (F-024).
 
 **There is almost no mechanical verification of any of this.** The project has no CI (an
 accepted risk in architecture.md). A gate exists since US-027 — `FANTASIA/run-tests.ps1`,
-150 tests, 0 failures — and a maintainer runs it by hand, so a security test placed in the
-suite is now checked by something. None of the 150 is one:
-`FANTASIA/Source/FANTASIATests/Private/Security/` is still empty, and the secret tests under
-`Private/Quality/` are the nearest thing the project has. Where a row below says a threat is
+168 tests, 0 failures — and a maintainer runs it by hand, so a security test placed in the
+suite is checked by something. Eighteen of the 168 are security tests, all in
+`FANTASIA/Source/FANTASIATests/Private/Security/BoltPackStreamBoundsTests.cpp` and all
+against F-021's threat; every other "no test" below is a case owed. Where a row below says a threat is
 mitigated, the mitigation is in the code and I have read it; where it says a test exists, I
 have read the test.
 
@@ -77,9 +77,14 @@ have read the test.
 - **Remote services** — ElevenLabs, any OpenAI-compatible endpoint, a LangGraph server:
   trusted to be *reachable*, not trusted for the content or the shape of what they return.
   Their responses are parsed by first-party code (F-023, F-027).
-- **The Neo4j server**: the same, and weaker — because the TLS path authenticates no
-  server, anything on the network path can take its place (F-020), and its bytes reach an
-  unguarded parser (F-021).
+- **The Neo4j server**: the same, and authenticated on the plain TCP transport — a `+s`
+  scheme requires a certificate that chains to the engine's trust store and carries the
+  host's name, so the server is the one the endpoint names, not whoever answers for it. On
+  the WebSocket transport the plugin's own decision does not govern the connection (F-055),
+  and under `+ssc` the server is unauthenticated by request. Its bytes reach a parser
+  that bounds every read, count and nesting depth against the buffer and refuses what does
+  not fit, so what it can still do with them is stop the connection decoding rather than
+  read the process's memory (F-048).
 - **The release host and the network to it** (GitHub): trusted only to the extent that TLS
   to `github.com` is trusted. The archives themselves are unauthenticated (F-026).
 - **The maintainer**: trusted, and the only publisher of binaries. A single maintainer with
@@ -113,9 +118,15 @@ have read the test.
   mistyped `http://` endpoint sends the key in the clear, and three of the five LLM presets
   default to `http://localhost`.
 - **TB-4 the Neo4j server <-> M-neo4j.** Contract: C-neo4j. Credentials cross outbound;
-  PackStream bytes cross inbound. Unmitigated in both directions: TLS authenticates no
-  server (F-020), TLS is chosen by the endpoint scheme and silently overrides the property
-  (F-011), and the inbound parser has no bounds checks (F-021).
+  PackStream bytes cross inbound. Mitigated outbound on the plain TCP transport: a `+s`
+  scheme verifies the chain against the engine's bundle and the host's name against the
+  certificate, and refuses the connection before a credential is written. Unmitigated
+  outbound: on the WebSocket transport the connection is governed by the URL string rather
+  than by that decision (F-055), and TLS is chosen by the endpoint scheme, silently
+  overriding the property (F-011).
+  Mitigated inbound: every length, count and nesting depth in a PackStream value is bounded
+  against the buffer before use and a message is capped at 16 MiB, so the worst a hostile
+  server reaches is a connection that decodes nothing (F-048).
 - **TB-5 the host project's configuration -> the components.** Contract: ADR-0001 and the
   `Config` specifier on the owning property **and** `Config = Game` on the class, which
   together are the whole mechanism: `LoadConfig` walks a class's own `Config` properties and
@@ -402,7 +413,12 @@ have read the test.
 ### M-neo4j
 - Entry points: `UNeo4jComponent::submitQuery` and its `endpoint`, `port`, `user`,
   `password`, `Transport` and `UseSSL` configuration; the exported PackStream codec; the
-  (unexported, F-012) Bolt message layer.
+  (unexported, F-012) Bolt message layer. `UseSSL` is the one entry point whose value is
+  mostly not its own: `BeginPlay` forces it from the endpoint scheme for nine of the ten
+  schemes the component meets (`Neo4jComponent.cpp:251-256`), so it is honoured only for
+  `neo4j://` and for an endpoint with no scheme at all (F-011). A second entry point is not
+  the component's at all: the routing table, through which the server names the host the
+  client reconnects to (`Neo4jComponent.cpp:1351-1368`).
 - Becomes code or commands: **a Cypher query**. Parameters are passed properly — the
   `TMap<FString, FString>` is converted to a Bolt parameter map and sent in RUN beside the
   query, never spliced into it — so the safe structure exists and works. But the map is
@@ -412,7 +428,15 @@ have read the test.
   that cannot be parameterised in Cypher anyway, and nothing in C-neo4j says which values
   may be interpolated or how.
 - Deserialises: **everything the server sends** — the 4-byte handshake reply (length-guarded),
-  Bolt chunks, and PackStream values of every type, recursively.
+  Bolt chunks, and PackStream values of every type, recursively. Three bounds hold over that
+  surface: `FBoltPackStreamReader::Require(N)` gates every read, `Reserve` and `Append` and
+  refuses a negative `N` as well as an over-long one; `ReadValue` carries its nesting as a
+  parameter and refuses past 64 containers; and `UNeo4jComponent::OnDataReceived` refuses a
+  message past 16 MiB before the bytes reach the dechunker. A refusal yields a null value,
+  exhausts the reader and logs once. All three bound the **bytes on the wire**, and nothing
+  bounds what they decode into or how long it is kept: one wire byte becomes about 208 bytes
+  of heap (F-056) and the decoded records of one query are retained with no limit until the
+  server ends it (F-060).
 - Secrets: `password` and `user`, both `Config` UPROPERTYs, neither logged — verified across
   every `UE_LOG` in `Neo4jComponent.cpp`. They are sent in HELLO or LOGON on every
   connection.
@@ -420,23 +444,91 @@ have read the test.
   credentials it was given.
 - Threats:
   - *Spoofing the server, and disclosure of the credentials and the whole session*:
-    **unmitigated** — the TLS path sets no verify mode, loads no trust store and checks no
-    hostname, so any on-path attacker completes the handshake (F-020, blocker). No test.
+    **mitigated on the plain TCP transport** — a `+s` scheme decides to verify, and the
+    decision is applied in four steps each of which is present and asserted: the engine's
+    certificate bundle is loaded and the load's return tested, `SSL_VERIFY_PEER` is set,
+    the host's name is written on the context's X509 verification parameters, and
+    `SSL_get_verify_result` is inspected after a successful handshake rather than a
+    completed handshake being read as a verified one. All four are applied to the `SSL_CTX`
+    before the BIO exists, because an `SSL` inherits them at creation. Any failure returns
+    from `TcpConnect` before a socket exists, so `HELLO` and the `LOGON` that carries `user`
+    and `password` are unreachable by construction, and the refusal names the failed check
+    and the `+ssc` migration (F-020, closed by US-031; DEC-023, DEC-024, DEC-025).
+    Evidence: `FANTASIA/Source/FANTASIATests/Private/Security/Neo4jTlsVerificationTests.cpp`,
+    11 tests. The decision is asserted for all ten schemes on both framings with both values
+    of `UseSSL`, the application is read off an `SSL_CTX` the test owns and the component
+    configured, and the hostname — which cannot be read back as a string on OpenSSL 1.1.1t,
+    where `X509_VERIFY_PARAM_get0_host` does not exist — is read by exercising it: the
+    parameters the component wrote accept a self-signed certificate carrying the decided name
+    and reject one carrying another with `X509_V_ERR_HOSTNAME_MISMATCH`. Three duals keep the
+    battery honest, because every assertion above would also pass against a context that
+    verified everything: an unconfigured context verifies nothing and accepts any name,
+    `+ssc` leaves the context stating exactly that, and an endpoint that parses to no host is
+    refused while the same endpoint under `+ssc` is accepted.
+    **Not mitigated on the WebSocket transport**, where the decision is advisory (F-055).
+  - *Bypassing the verification decision on the WebSocket transport*: **unmitigated** — the
+    WebSocket URL, not the decision, is what governs that connection, and two inputs write
+    that URL outside the decision: the engine-wide `[LwsWebSocket] bDisableCertValidation`
+    key and the `-lws-insecure=` switch, which the plugin cannot observe, and a routing
+    address that contains a scheme, which the server supplies (F-055, major). No test: the
+    WebSocket path has no seam and the engine's verification is not reachable from this
+    suite.
   - *Disclosure through plaintext*: **unmitigated** — `BeginPlay` overwrites a user-set
-    `UseSSL` from the endpoint scheme and says nothing (F-011, major, excluded from the 5.8
-    line by the user's decision in CR-001).
-  - *Memory corruption and exhaustion from a server message*: **unmitigated** — the
-    PackStream reader bounds-checks nothing, recurses once per nested marker, reserves from
-    an attacker-chosen count, and the dechunker caps nothing (F-021, blocker). C-neo4j
-    asserts the opposite behaviour and cites a test that does not exercise it. No test.
+    `UseSSL` from the endpoint scheme and says nothing (F-011, major). P-19's security
+    carve-out admits the fix to the 5.8 line (CR-004), and CR-010 settles its shape:
+    `UseSSL` goes, and the scheme alone decides encryption.
+  - *Memory corruption from a server message*: **mitigated** — the reader
+    refuses rather than clamps on every length, count and nesting depth the buffer cannot
+    satisfy, and the component caps one message at 16 MiB (F-021, closed by US-030; DEC-020,
+    DEC-021). Evidence:
+    `FANTASIA/Source/FANTASIATests/Private/Security/BoltPackStreamBoundsTests.cpp`, 18 tests
+    over the adversarial encodings — a null base pointer, each multi-byte reader truncated
+    mid-value, a declared length or count beyond the buffer for string, bytes, list, map and
+    structure, a negative 32-bit length and count, nesting past the limit, and an
+    unterminated chunk stream — with the two duals that keep them honest, that nesting
+    within the limit and a value ending on the buffer's last byte still decode.
+  - *Memory exhaustion from a server message*: **partly mitigated, and the residue is
+    measured.** The cap bounds the bytes on the wire and nothing bounds what they become.
+    `sizeof(FBoltValue)` is 176 bytes and every alternative of the variant is resident at
+    once, so `MakeShared` spends a 192-byte block plus a 16-byte shared pointer on each
+    scalar: a well-formed `List32` of one-byte integers at exactly the cap — 16777216 wire
+    bytes, within every bound the reader and the component enforce — decodes into 3141 MiB
+    resident in 1066 ms, 196 bytes of heap per wire byte, and `OnDataReceived` runs on the
+    game thread, so one message freezes a real-time application for about a second (F-056,
+    major, `Kind=security`; measured by
+    `FANTASIA/Source/FANTASIATests/Private/Stress/BoltStressTests.cpp`, test
+    `FANTASIA.Stress.Bolt.Reader.DecodeAmplification` with `-StressFullAmplification`,
+    which is the only run that is evidence because allocation cost is superlinear). That
+    spike is survivable; what makes it fatal is that nothing releases it. Each RECORD's
+    decoded fields are retained in `CurrentRecords` (`Neo4jComponent.cpp:1038`), emptied
+    only when a query starts (`:1123`) or when the terminating SUCCESS arrives (`:1429`),
+    and the client asks for every row (`PULL n=-1`, `BoltProtocol.cpp:297-301`), so a server
+    that sends RECORDs and never the SUCCESS is retained against without limit: about
+    300 MiB of upload holds about 60 GiB (F-060, major, `Kind=security`, no test yet).
+    F-060 is the half of F-021's item 4 that US-030 did not close — the dechunker's
+    unbounded accumulation was capped and the component's was not — and the two findings
+    compose: a budget per message does not touch a flood of small messages, which still
+    retains about 36 times what it costs to send. Both fixes are a private budget and both
+    are admissible on the 5.8 line; the narrower `FBoltValue` that would remove the factor
+    itself is exported and named in C-neo4j, so it is a contract version and not a security
+    fix (J-0209, J-0210).
+  - *Loss of the connection after a refused message*: **unmitigated** — the cap refusal
+    resets the dechunker mid-stream, so the framing cannot be resynchronised and the
+    component reports itself connected while decoding nothing, with no error on its
+    delegates (F-048, major, `Kind=bug`: the ruling and its conditions are in Open risks).
   - *Cypher injection*: partly mitigated by the parameter map, undermined by its
     string-only type and unaddressed by the contract. No finding opened: fixing it means
     changing the parameter type, which is a C-neo4j version and a Blueprint-ABI change, so it
     is a change request rather than a defect. It is in Open risks below.
   - *Redirection through the routing table*: with `neo4j://` the server tells the client
     which host to connect to and the client obeys. That is the protocol, and it is safe only
-    if the server is authenticated — which F-020 says it is not, so F-020 turns routing into
-    an attacker-controlled redirect.
+    if the server is authenticated, which on the plain TCP transport it now is: the scheme's
+    promise comes from the configured endpoint and the name verified comes from the host
+    being connected to, carried in one field so the two cannot drift apart, so a redirect to
+    a backend is a redirect to a backend that must prove its own name. On that transport the
+    address is stripped of any scheme before it is used, so a routing record of
+    `wss+insecure://evil` resolves nowhere. The WebSocket transport builds its URL from the
+    raw address instead and passes such a record through verbatim (F-055).
   - *Information disclosure through diagnostics*: `response` holds the last raw response as
     a Blueprint-readable property, and node and relationship properties are flattened into
     string maps. Graph data therefore reaches Blueprints wholesale; whether that matters is
@@ -513,7 +605,17 @@ have read the test.
   above, and by the rule that a test needing a live endpoint or a database skips cleanly
   rather than authenticating. Nothing enforces either mechanically, and with no CI there is
   no build log for a leaked key to land in — which removes the usual consequence, not the
-  rule. `Private/Security/` is mine and is empty: every "no test" above is work owed.
+  rule. `Private/Security/` is mine and holds F-021's and F-020's batteries and the
+  `FNeo4jTestAccess` seam header they share; every other "no test" above is work owed.
+  The seam header is a shared file by necessity: it is the one definition of the struct
+  `UNeo4jComponent` befriends, so two translation units cannot define it differently, and
+  M-neo4j's coder extends its forwarders when the component's private shape changes. Every
+  member is a reader or a single call, and the one that can open a socket says so.
+  F-020's battery adds a second kind of surface to this module: it links OpenSSL
+  (`FANTASIATests.Build.cs`, the engine module and never the plugin's own path, F-044) and
+  builds a 2048-bit key and two self-signed certificates in memory, which never touch disk
+  and are freed with the test. A test that generated a key pair into a file, or trusted one
+  on the machine's store, would be the first thing in this suite to leave state behind.
 
 ### M-dist
 - Entry points: `bootstrap.bat` / `bootstrap.sh` and their flags; `setup_whisper.*`;
@@ -600,14 +702,110 @@ architecture.md.
 Blockers first; a blocker means a story that depends on it cannot be accepted while it is
 open.
 
-- **F-020 (blocker, open)** — M-neo4j's TLS path authenticates no server, so any on-path
-  attacker reads the Neo4j password and the whole session, including on `neo4j+s://` and
-  Aura. The fix changes C-neo4j, so CR-001's bar keeps it off the 5.8 line; that exclusion
-  is the user's to accept, with the consequence in front of them.
-- **F-021 (blocker, open)** — M-neo4j's PackStream reader bounds-checks nothing on bytes
-  that came off a socket: out-of-bounds read with an attacker-chosen length, unbounded
-  recursion, unbounded reservation, and no cap on message size. C-neo4j asserts a
-  mitigation that does not exist.
+- **F-020 (blocker, open; US-031's fix in the tree)** — the TLS path that authenticated no
+  server now loads the engine's certificate bundle, sets `SSL_VERIFY_PEER`, writes the host
+  on the context's verification parameters and inspects the verify result after the
+  handshake, and refuses before a credential is written. The finding's reproduction — the
+  grep that returned nothing — returns five call sites, and the behaviour is asserted in
+  `FANTASIA/Source/FANTASIATests/Private/Security/Neo4jTlsVerificationTests.cpp`, which
+  passes. The finding closes when US-031 is accepted. What the fix leaves behind is F-055,
+  the WebSocket transport, which the fix deliberately does not reach.
+- **F-055 (major, open)** — on the WebSocket transport the component's security decision is
+  advisory: the URL string governs the connection, and two inputs write it outside the
+  decision. One is the engine's, `[LwsWebSocket] bDisableCertValidation` in `GEngineIni` or
+  `-lws-insecure=true` on the command line, which forces the certificate callback to accept
+  anything for every WebSocket in the process
+  (`LwsWebSocketsManager.cpp:93,97`, `LwsWebSocket.cpp:554,741`); a key an integrator sets
+  for an unrelated development endpoint therefore removes authentication from the database
+  connection, with nothing in the plugin able to see it. The other is the server's: the
+  WebSocket branch builds its URL from the raw address rather than from the decided host, and
+  maps eight schemes but not `wss+insecure://`, which the engine's client accepts and which
+  means allow-self-signed, so a routing record containing that scheme is passed through
+  verbatim and the reconnect carries `LOGON` over an unverified connection the server chose.
+  The planner's note that this branch is dead holds only for a well-behaved server.
+- **F-021 (blocker, open; US-030's fix in the tree)** — the reader that bounds-checked
+  nothing on bytes off a socket now refuses every length, count and nesting depth the buffer
+  cannot satisfy, and the component caps one message at 16 MiB. The reproduction the finding
+  names is an assertion in
+  `FANTASIA/Source/FANTASIATests/Private/Security/BoltPackStreamBoundsTests.cpp` and passes
+  there; the finding closes when US-030 is accepted. What the fix leaves behind is F-048,
+  F-056 and F-060.
+- **F-056 (major, open, `Kind=security`)** — the cap bounds wire bytes and not decoded size,
+  so a well-formed message at the cap costs 3141 MiB and 1066 ms of game thread, about 196
+  bytes of heap per wire byte. **Ruled a security finding**, reversing the tester's
+  `Kind=performance` at its own request. It is denial of service across TB-4 driven wholly
+  by bytes from the untrusted side, and it is the surviving half of F-021's threat, so
+  without the label the claim that exhaustion from a server message is mitigated has nothing
+  holding it honest. My carve-out test — would I be glad to see the fix the label licenses —
+  passes here where it failed for the EOL OpenSSL (J-0137) and for F-048 (J-0173): a running
+  budget on values decoded per message inside `FBoltPackStreamReader`, refusing exactly as
+  `Require` and `MaxBoltNestingDepth` do, private, no exported symbol, no Blueprint-facing
+  signature, the same shape as F-021's own admitted fix, and unable to cause F-048 because
+  `PopMessage` has already resolved the message boundary before the reader runs. Major and
+  not blocker: no boundary crossed, no secret moved, nothing becomes code, the spike is
+  bounded and transient, and US-030 strictly reduced it. US-030 is acceptable with it open,
+  on the condition that its own narrative, C-neo4j and this document stop claiming a server
+  cannot stop the process; the last of the three is done (J-0209).
+- **F-060 (major, open, `Kind=security`)** — decoded records are retained with no bound
+  until the server ends the query, so F-056's bounded spike becomes unbounded retention and
+  process death from a few hundred MiB of upload. This is the half of F-021's item 4 that
+  US-030 did not close: the dechunker's unbounded accumulation was capped, the component's
+  was not. Admissible fix, and the reason the label is justified: a private budget on what
+  one query retains, failing the query through the FAILURE path that already exists in the
+  same function on the same thread (`Neo4jComponent.cpp:1021-1029`, `:1046-1057`) rather
+  than through a teardown. Major for the same reasons as F-056, and it does not bar US-030,
+  whose criteria name the dechunker. **It owes a test**, which is cheap: feed N framed
+  RECORD messages through the seam with no terminating SUCCESS and read `CurrentRecords`
+  back (J-0210).
+- **F-048 (major, open, `Kind=bug`)** — a server that forces one cap refusal leaves the Bolt
+  stream unresynchronisable, so the component reports itself connected and decodes nothing.
+  Measured, not inferred: `Quality.Neo4j.Cap.RefusalLeavesStreamUnrecovered` forces one
+  refusal with a 20 MiB message and then delivers 0 of 3 following replies against 3 of 3 on
+  the control.
+  **Ruled a bug and not a security finding, on three reasons and not four.** A fourth
+  reason once given — that a plan expected the connection to keep working — is withdrawn:
+  no such plan exists, the sentence belongs to the planner's profile for core-dev
+  (`docs/ateam/verification/core-dev.md:88`), it predates the finding and 'survives' in it
+  can only mean 'not torn down' (J-0207). The ruling stands on what remains, below.
+  It passes the STRIDE test on denial of
+  service — the trigger is attacker-controlled across TB-4, one 16 MiB message suffices, and
+  the effect outlasts the attacker's presence — but `Kind=security` is not a neutral record
+  here: under CR-004 it licenses the fix onto the shipped 5.8 line whatever surface it
+  touches, and the fix available for an unresynchronisable stream is a connection teardown
+  on a framing violation. That changes what C-neo4j promises about a connection, fires on a
+  merely faulty server as readily as on a hostile one, and lands in the disconnect path
+  beside a live receive thread. The risk of taking it unbarred exceeds the risk it answers,
+  so it goes through the ordinary route. Three conditions flip the ruling: a cap refusal
+  reachable by a message a legitimate server sends, rather than one past 16 MiB; a second
+  `Dechunker->Reset()` reachable mid-stream from any other path (today there are two reset
+  sites, `Neo4jComponent.cpp:141` per connection and `:579` on the refusal, and only the
+  second is reachable mid-stream); or any way to reach the desync that also reaches memory,
+  a secret or a tool call.
+  F-057 bears on the first condition and does not meet it. The cap is charged to the whole
+  transport read, so a message under the cap is refused when a read straddles the end of one
+  message and the start of the next, which does make the refusal reachable without a message
+  past 16 MiB. But the band is a single Bolt message within one transport delivery of the
+  cap — 16 KiB of the 16 MiB range — and it takes a result that already sits at the edge of
+  what the cap permits, so the desync is not reachable in ordinary operation and the balance
+  that decided the ruling does not move. What would move it is the cap being lowered, or a
+  result shape that routinely approaches it; both would put F-057's band in everyday use.
+- **F-057 and F-058 (minor, open, `Kind=bug`) — ruled not security**, which is recorded
+  because the question was asked rather than assumed. F-057's error is strict and never
+  permissive: charging the cap to the whole read refuses up to one transport delivery early
+  and can never let more than the cap through, so nothing is gained by provoking it that a
+  compliant message does not already get, and its only security-adjacent consequence is the
+  widening of F-048's trigger assessed above. One correction to its wording: C-neo4j is
+  incomplete here rather than wrong — it states the slack on the permissive side only, and
+  the strict side needs the same sentence. F-058 mangles a bracketed IPv6 literal, and the
+  single thing that would make a hostname parse bug a security defect is the connect target
+  and the verified name diverging. They cannot: `ExtractHostname`'s one result is passed to
+  `InitiateConnection` as the host to reach and from there into `DecideTransportSecurity` as
+  the name to verify (`Neo4jComponent.cpp:266`, `:285`), and keeping them in one value is
+  the stated mitigation for the routing redirect. `[` resolves to nothing and no certificate
+  carries it, a userinfo prefix left in the host behaves the same way, and an endpoint that
+  parses to no host is already refused with a dual test on it. The risk to watch is not this
+  defect but any future change that hands the socket a differently parsed host from the one
+  verified.
 - **F-008 (major, open; US-028's fix in the tree)** — the two component properties now read
   from `DefaultGame.ini`, and the residue is what no specifier can reach: a key already
   stored in a user's asset stays there until that asset is cleared and re-saved. The
@@ -617,9 +815,10 @@ open.
   which cannot be used without typing a live key into an asset, in an actor that ships in
   the runtime module. The actor is not a `Config = Game` class, so it is not one specifier
   away from safe. Outside US-028's scope.
-- **F-011 (major, open; excluded from 5.8 by CR-001)** — `UseSSL` is silently overwritten
-  from the endpoint scheme, so a user who asks for encryption against `bolt://` gets
-  plaintext.
+- **F-011 (major, open; admitted to 5.8 by CR-004, shape chosen in CR-010)** — `UseSSL` is
+  silently overwritten from the endpoint scheme, so a user who asks for encryption against
+  `bolt://` gets plaintext. US-032 removes the property, leaving the scheme as the only
+  thing that decides encryption.
 - **F-022 (major, open)** — a crafted WAV file read by M-asr over-reads the heap by up to
   2 GB into the transcript, and crashes or hangs on three other fields.
 - **F-023 (major, open)** — a crafted synthesis response crashes or hangs M-tts in the HTTP
@@ -657,12 +856,13 @@ open.
   plugin's vendored libraries are the engine's own bytes (F-044), so there is no bump for
   build-dev to make — only a migration that would put a second OpenSSL in a process whose
   HTTP module links the engine's, which is a way to make this worse rather than better. The
-  confidentiality consequence is already owned by a blocker: F-020 means the TLS path
-  authenticates no server at all, so an on-path attacker reads the Neo4j password by
-  presenting any certificate and never needs a library defect — patching OpenSSL while F-020
-  is open buys nothing, and F-020 is the one to fix first. And the advisories after 1.1.1t
-  are denial of service and certificate-policy correctness, which is weight on a door that
-  F-020 leaves open. A finding naming a condition nobody here can close would stay open for
+  only fix a finding would license is that migration, which is worse than the risk it
+  answers, and under CR-004 a `Kind=security` finding licenses it onto the shipped line
+  whatever surface it touches — so the finding would authorise the one action nobody should
+  take. And the advisories after 1.1.1t are denial of service and certificate-policy
+  correctness, weighed against a path that now verifies the chain, tests the trust store's
+  load and checks the host's name: the engine's HTTP module and WebSocket client have run on
+  these same bytes throughout. A finding naming a condition nobody here can close would stay open for
   the life of the line and teach the team that an open finding is weather. **It becomes
   actionable, as a finding and an ADR under P-06, when either Epic ships a newer OpenSSL in
   an engine the project targets, or the project decides to carry its own TLS for Bolt** — and
@@ -702,11 +902,20 @@ open.
   found a specific defect in the vendored code and the vendored tree is unmapped.
 - **F-002 (major, open)** — a linked and include-pathed gRPC, protobuf and abseil stack that
   nothing uses: attack surface and 330 MB for no benefit.
-- **No security test exists.** `FANTASIA/Source/FANTASIATests/Private/Security/` is empty.
-  Every "no test" in the surface sections above is a case owed, and the order they are owed
-  in is the order of this list. The two blockers are reproducible as unit tests against the
-  exported PackStream codec, which is the cheapest security evidence available to the
-  project and the first thing I will write; US-030 and US-031 carry them.
+- **Two threats of the list have tests**, both in M-neo4j and both offline.
+  `BoltPackStreamBoundsTests.cpp` holds 18 against F-021 and `Neo4jTlsVerificationTests.cpp`
+  11 against F-020, under
+  `FANTASIA/Source/FANTASIATests/Private/Security/`. They were the cheapest security
+  evidence available, because the exported PackStream codec and the static decision-plus-
+  application seam both run with no device, no network and no database. Every other "no test"
+  in the surface sections above is a case owed, and the order they are owed in is the order
+  of this list. F-022's and F-023's are next: both are pure functions, and neither needs a
+  seam to reach. A third threat of the list has a test that is not mine:
+  `Stress/BoltStressTests.cpp` measures F-056, and the measurement is the finding, so
+  nothing is owed under `Private/Security/` for it — the battery that would belong to me is
+  the one that pins the budget once there is a budget to pin. F-060 is the case to write
+  next after F-022 and F-023, because its growth is assertable through the existing seam
+  with no device, no network and no database.
 - **No credential is in the repository, and the sprint did not add one.** The working tree
   was scanned against `HEAD` rather than by commit, because S-01's whole product is
   uncommitted: the text diff of all 24 modified tracked files, the six untracked source and

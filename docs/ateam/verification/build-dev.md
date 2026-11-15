@@ -4,39 +4,32 @@
 - Language: csharp
 - Reviewer: reviewer
 - Tester: tester
-- As of: J-0059
-## This sprint (S-01)
+- As of: J-0165
+## This sprint (S-02)
 
-One task: **T-02, the gate** (US-027, `FANTASIA/run-tests.ps1`, new file). It is the
-sprint's highest-value deliverable because P-04 has no mechanism at all today —
-`gates.task_completed` is `null` — and everything else this sprint is verified by hand
-until it exists.
+One task: **T-26** (US-031, `FANTASIA/Source/FANTASIATests/FANTASIATests.Build.cs`). The test
+module links no OpenSSL today — the file names Core, CoreUObject, Engine, Json, WebSockets
+and FANTASIA and nothing else — so US-031's acceptance test cannot assert the state of the
+`SSL_CTX` the component configured. F-020 is a defect in the *applying* of TLS verification
+and not in the deciding, so a test that cannot see the context cannot pin it. This task is
+why that test exists.
 
-What the reviewer examines hardest, in order:
+It is off the critical path and runs first, in parallel with T-24.
 
-1. **The script cannot exit zero without having compiled and run tests.** Three ways to
-   verify nothing (the compile failed, the editor wrote no report, the report names zero
-   tests) and one way to look wrong (a deliberately failing test) are each demonstrated
-   with their exit code, not argued. A gate that passes when the editor failed to boot is
-   the single failure mode that makes a gate worse than none, because it is believed.
-2. **The exit code comes from the exported report, not from the editor's exit status.**
-   `UnrealEditor-Cmd.exe` exits zero in cases that are not successes.
-3. **Nothing machine-specific is hard-coded** beyond the one documented default engine
-   path, and the maintainer's host project is neither read nor written. ADR-0016 says why:
-   that project associates with an absent UE 5.6, enables `LowEntryExtStdLib` which has no
-   5.8 build, and carries its own C++ modules — three obstacles that belong to a project
-   outside this repository and cannot be fixed from here, which is why the gate generates
-   its own harness instead.
-4. **The measurement is a measurement.** A cold and a warm number, taken from runs, with
-   the proposed `gates.task_completed` command following from the warm one by the rule in
-   US-027's acceptance. "Fast enough" is not a judgement this task is allowed to make
-   without the number.
-5. **P-07.** The script is the story. Not a bootstrap change, not a `.Build.cs` change, not
-   a fix for F-013, F-014 or F-015 while passing through.
+What the reviewer examines hardest:
 
-Note for the reviewer: a gate run recompiles the tracked DLLs under
-`FANTASIA/Binaries/Win64/`, so a dirty working tree after this task is expected and P-12's
-refresh-commit discipline is unchanged. The script says so before it exits.
+1. **It is `AddEngineThirdPartyPrivateStaticDependencies(Target, "OpenSSL")` and nothing
+   else.** No change to the runtime module's `Build.cs`, no new include path, no third-party
+   copy, no version pin.
+2. **A test-module dependency is not a shipped dependency.** That is why this needs no ADR
+   under P-06, and the DEC should say so in one line rather than leaving a reader to wonder
+   whether the plugin now ships OpenSSL. It already does, through the engine, on the runtime
+   side.
+3. **The gate still passes with the same test count.** `run-tests.ps1` has a `-MinTests`
+   floor of 134 and a recompile of the test module is exactly the case where a build error
+   looks like a test failure. A gate run before and after, with its numbers, is the evidence.
+4. **P-07.** Not a bootstrap change, not a `.uplugin` change, and not F-013, F-014 or F-015
+   while passing through.
 
 ## Reviewer checklist
 

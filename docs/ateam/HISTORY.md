@@ -4664,3 +4664,1376 @@ Findings: 29 opened (2 blocker, 12 major, 15 minor), 5 fixed - F-008, F-029, F-0
 Stress measures against NFRs: none, and this is the honest gap. NFR-001 to NFR-003 still have no measure; nothing could check a latency budget before a gate existed, and writing those measures is the first thing the gate makes possible. The one timing fact recorded is a risk rather than a measure: the capture suite runs in 0.98 s against US-029's 'under a second', mostly per-test framework overhead, and it will exceed that budget on a slower machine.
 
 Security pass: the dependency audit priced ten dependencies from the tree, each with the file and line its version was read from, three of them pinned to 2022-era or end-of-life code, and stated that no CVE feed was queried because the project has no mechanism permitting one. The secrets scan covered the working tree against HEAD, the printable strings of both rebuilt DLLs and 16 credential patterns; it found one match, the test suite's own ini fixture. It scanned the working tree rather than commits because S-01 had none, which is also why the method's post-cleanup diff read was impossible (J-0154).
+
+## J-0160 | 2026-11-15 | CR-010 | lead
+- Event: proposed
+- Type: contract
+- Class: major
+- Impact: Contracts: C-neo4j loses UseSSL from its configurable surface (line 19) and its TLS clause is rewritten so the scheme is the only thing that decides encryption; lines 81-83, which currently describe the silent downgrade as present fact, go with it. This is an interface removal, so C-neo4j takes an integer version rather than a point release. Modules: M-neo4j, core-dev's. Blueprint surface: UseSSL is a reflected property on UNeo4jComponent (Neo4jComponent.h:124), so removing it invalidates any compiled Blueprint that pins it - P-03 engaged independently of P-19, which is why this CR exists even though CR-004 already admits the fix to the 5.8 line. Consumers: M-demo and M-tests; no test references UseSSL, so the suite is unaffected. Stories: US-032 moves from draft to ready with this shape. Findings: F-011 closes when US-032 lands; F-020 and F-021 are separate and sequenced before it.
+- Options: (A) Remove UseSSL so the scheme alone decides TLS, as Neo4j's own drivers do - the misleading state becomes unrepresentable rather than merely reported. (B) Keep UseSSL and refuse to connect when it is true against a non-TLS scheme: no Blueprint surface moves, and nothing silently downgrades. (C) Keep both property and behaviour and log loudly on the downgrade: smallest change, and the password still crosses the network in clear for anyone who misses the log line. (D) Don't change: F-011 stays open and a user who sets UseSSL against bolt:// is told nothing.
+- Changes: none
+
+F-011 is that setting UseSSL = true against a bolt:// endpoint sends the Neo4j password in clear with no warning. P-19 refused the fix for the life of the 5.8 line until CR-004's security carve-out admitted it; the shape was left to the user and this CR records their choice.
+
+The user chose (A): remove UseSSL. The property's only honest value is the one the scheme already implies, so the fix is to stop offering a knob that cannot be obeyed.
+
+One thing US-032 must settle rather than assume, flagged here because it was noticed while writing this entry and not verified: Neo4jComponent.cpp:117-122 forces UseSSL to match the scheme and only respects the configured value for a scheme it does not recognise, while the comment at :184 says it honours UseSSL even where the scheme did not imply TLS, describing an upgrade. Those two may not agree, and if they do not, the two transports promise different things - which is the same shape as the gap US-031 closes between the plain-TCP and WebSocket TLS paths. The story should establish which is true before it removes anything.
+
+P-07 applies with force here: the admitted item is F-011's fix and the contract edit that describes the new behaviour, not the refactor it would be convenient to carry while C-neo4j is open.
+
+## J-0161 | 2026-11-15 | CR-010 | lead
+- Event: approved
+- Decision: Option (A): remove UseSSL, so the endpoint scheme is the only thing that decides whether the connection is encrypted.
+- Approver: user
+- Changes: none
+
+Chosen by the user at S-02 planning, from the three shapes the backlog had drafted. The planner's recommendation and the user's choice agree.
+
+## J-0162 | 2026-11-15 | F-046 | lead
+- Event: accepted
+- Reason: The user chose to leave every CLAUDE.md ignored. The module state documents stay local by decision rather than by accident, which is what this finding existed to establish.
+- Changes: none
+
+Accepted, not fixed, and the consequences are accepted with it: a reclone of this repository gets no module state documents and no protocol document; F-045's fix and the runtime module's J-0113 rewrite remain in this working copy only, so neither is fixed in the repository; and the ATeam scripts' hard-coded C:/Users/ACER/... paths are not published, which is the one benefit of the decision.
+
+The finding's value was never the fix. It was that three files the project's own protocol designates as state were untracked without anyone having decided that. That is now decided.
+
+## J-0163 | 2026-11-15 | NOTE | lead
+- Story: US-031
+- Finding: F-020
+- Decision: The user confirmed that US-031 may break a connection that works today.
+- Approver: user
+- Changes: none
+
+US-031 makes bolt+s:// and neo4j+s:// verify the server's certificate against a trust store and check its hostname, which stops a self-signed server connecting where it connects today. The sprint method asks the user to confirm that trade before the story is planned, and they did, choosing it over warning for the 5.8 line and enforcing in 5.9.
+
+What the story therefore owes, and the reason the alternative was offered at all: the migration is one character - bolt+ssc:// accepts a self-signed certificate and is the documented way to opt out - and that must appear in the failure's log message and in C-neo4j, or the first report will be 'the update broke my database' rather than 'I need to change my URL'.
+
+The rejected option is recorded because it was not unreasonable: warning and connecting breaks nothing on update. It was declined because it leaves F-020's exposure open for the life of the line, and F-020 is the finding that makes the password readable to anyone who can answer for the host.
+
+## J-0164 | 2026-11-15 | DEC-019 | planner
+- Module: M-tests
+- Decision: The security engineer writes US-030's and US-031's acceptance tests in the Security/ directory it owns, and does not review the implementation tasks whose tests it wrote; the reviewer reviews implementation and test together and the tester runs the independent pass on the landed fix.
+- Reason: The batteries are adversarial encodings and an OpenSSL-context assertion, which is the security role's competence; both findings are its own, so the test is its repro turned into an assertion; and moving the paths out of Security/ would need a team change, which is the user's.
+- Changes: none
+
+`team.json` gives `FANTASIA/Source/FANTASIATests/Private/Security/` to the security
+engineer and the rest of `Private/` to test-dev, and the most specific path wins. US-030's
+and US-031's `Tests:` paths are in that directory, so the acceptance tests of two stories
+are in their own auditor's hands. That is a different arrangement from the method's default
+flow — the coder implements, the tester tests, the security engineer reviews — and it should
+be chosen rather than inherited from a path.
+
+It is chosen, for three reasons. The tests are adversarial batteries and a TLS-context
+assertion, which is the security role's competence and not a sonnet coder's: a weak battery
+written by test-dev would be rewritten by the security engineer anyway, at the cost of two
+runs and a review cycle. The repro is already the security engineer's — both findings are
+its own, with byte sequences and the four missing OpenSSL calls named — so the test is its
+repro turned into an assertion rather than a fresh act of invention. And moving the paths out
+of `Security/` to keep the roles apart would either leave the security engineer's own
+directory empty of the tests that belong in it or require a team change, which is the user's.
+
+What it costs, and the two things that pay for it. The cost is that nobody independent checks
+whether the battery asserts the right invariant. It is paid first by the authoring rule on
+the two test tasks: T-25 is written from F-021's repro and US-030's acceptance criteria and
+**not** from T-24's diff, which is feasible because `ReadValue`'s signature does not change;
+T-27's test reads only the declarations of the seam it calls, not its bodies. A test that
+mirrors the implementation's structure proves the implementation is self-consistent and
+nothing else. It is paid second by the reviewer, whose first object on both test tasks is
+whether every criterion has an assertion and whether at least one assertion would fail
+against the pre-fix code, and by the tester's independent pass on the landed fix — which is
+where independence was demonstrated in S-01, when the tester opened F-031, F-032 and F-033
+against US-028's fix rather than confirming it.
+
+The corollary, and the reason this is written down: the security engineer does not also
+review the two implementation tasks whose tests it wrote. The reviewer reviews implementation
+and test together. If the lead's dispatch requires a security review on every task carrying a
+`security:` line, then this arrangement inverts — test-dev writes the batteries in `Private/`
+from a specification the security engineer writes — and the planner's recommendation is the
+arrangement above, not the inversion.
+
+## J-0165 | 2026-11-15 | NOTE | planner
+- Stories: US-030, US-031, US-034
+- Held: US-032, US-033
+- Decision: DEC-019
+- Changes: backlog.md, architecture.md, verification/core-dev.md, verification/build-dev.md, verification/speech-dev.md, verification/test-dev.md
+
+The goal the user set is to make the Neo4j connection safe to point at a real server. Two
+stories reach it and a third does not, which is the whole of the recommendation below.
+
+**Two stories, not three.** US-030 (F-021, the reader bounds) then US-031 (F-020, server
+verification). US-032 (F-011, `UseSSL`) is refined to `ready` with CR-010's shape and held
+for S-03. Four reasons, in the order they decided it. US-014's `Blocked by:` names F-020 and
+F-021 and not F-011, so closing exactly these two is what returns US-014 to `done` and
+unblocks US-020 and US-021, the 5.8 ship; F-011 is on US-014's `Known defect:` line and on no
+critical path. US-031 is bigger than its `S` said, because the decision it has to assert is
+not reachable from any test today and the story now carries a seam as well as a fix, so it is
+re-estimated `M`. US-032 depends on US-031's seam, so holding it costs no rework and buys the
+one thing a one-coder critical path cannot buy itself: slack. And US-031 already breaks a
+working configuration (a self-signed certificate on a `bolt+s://` URL); shipping `UseSSL`'s
+removal in the same release puts two breaking migrations of the same property of the same
+component into one release note, where two releases with one each are the same work and a
+better explanation.
+
+**US-033 is out.** It is `ready` and it closes F-018, and it is M-asr and does not serve this
+goal. The argument for it is real and is recorded here so that the user can overrule knowing
+it: speech-dev and test-dev are otherwise idle while core-dev serialises, the story is two
+small tasks on files nothing else in the sprint touches, and it would cost about three
+dollars. The argument against is that it makes the sprint's answer to "what was S-02 about"
+two sentences instead of one, and S-01's own retrospective named scope discipline as the
+thing most likely to be tested. It stays at the head of the S-03 candidates with US-032.
+
+**One new story, US-034**, for the two tooltip sentences the user asked to ride into S-02:
+F-032 (M-llm, `Apply Provider Preset` erases the configured key) and F-033 (M-tts,
+`LoadConfig` reads the ini section of the instance's own class). It is off-goal and included
+because the user asked. It is a new story rather than two tasks citing US-028 because a task
+names a story and US-028 is `done`: citing it would attach work to a story the project is
+finished with, and reopening it would be worse, since `done` says what the system does today
+and only an open blocker takes that away (US-014 is the live case). US-034 is also two tasks
+and not one, because the two properties are in different modules and different owners' files
+— `OpenAICompatibleComponent.h` is core-dev's and `RESTTTSComponent.h` is speech-dev's — plus
+a third for the assertion in `SecretConfigTests.cpp`, which is test-dev's.
+
+**Nine tasks, T-24 to T-32.** T-24 (US-030, M-neo4j, core-dev) → T-25 (US-030's battery,
+security) → T-27 (US-031, M-neo4j, core-dev) → T-28 (US-031's TLS test, security) → T-32
+(C-neo4j, planner) is the serial chain and the sprint's length. T-26 (US-031, M-dist,
+build-dev) adds OpenSSL to `FANTASIATests.Build.cs` and runs first, in parallel, because
+without it T-28 can assert the TLS *decision* and not the TLS *context* — and F-020 is a
+defect in the applying, not in the deciding, so a test that cannot see the context does not
+pin it. T-29, T-30 and T-31 (US-034) are off the chain entirely. Who writes the two security
+batteries, and what that costs, is DEC-019.
+
+**The open question CR-010 left to US-032 is answered: they do not disagree.**
+`InitiateConnection` is called from `BeginPlay` with `ExtractHostname(endpoint)` and from
+`ReconnectToBackendAddress` with a bare `host`, so the full-URL branch at
+`Neo4jComponent.cpp:172-181` never runs and the `ws://`-to-`wss://` upgrade at `:186` can
+never fire — when `bActiveTls` is true the `else` branch has already written `wss://`, which
+does not start with `ws://`. Both transports take encryption from the single
+`bActiveTls = UseSSL` at `:147` and promise the same thing; the comment at `:184` describes a
+dead path. Two consequences for US-032, both now criteria on the story. The property is
+honoured today only for `neo4j://` and for an endpoint with no recognised scheme, because
+`BeginPlay` forces it true for the six `+s`, `+ssc`, `https` and `wss` schemes and false for
+`bolt://`, `http://` and `ws://` and `neo4j://` is in neither list — so those are the only
+configurations the removal changes, and for them it changes encrypted to plaintext, which is
+a silent downgrade introduced by the fix for a silent downgrade unless the component says so.
+It must say so, naming `neo4j+s://`, which is the same one-character migration US-031 needs.
+And the dead upgrade at `:184-186` goes with the property, because it exists only to honour
+it; the dead branch above it stays, under P-07, and is a quality finding for the tester or
+the security engineer to open.
+
+**Two things found while planning that belong to other owners.** The threat model's § M-neo4j
+says F-011 is excluded from the 5.8 line by CR-001, where CR-004 admitted it and CR-010 chose
+its shape, and it lists `UseSSL` among M-neo4j's entry points, which US-032 removes; that file
+is the security engineer's. And `FBoltDechunker` carries no `FANTASIA_API` and gains none in
+US-030, because F-012 stays deferred and widening C-neo4j's surface is not what CR-004 admits:
+the message cap is therefore enforced on `UNeo4jComponent`'s side of the dechunker, where the
+class's own `FANTASIA_API` already exports the private members a test needs, and if M-neo4j
+concludes it can only live inside the dechunker the task stops for a CR rather than exporting
+a class in passing.
+
+**A budget of $160, against an expected $145.** Built from S-01's medians times the planned
+runs, with two corrections S-01's numbers do not carry. core-dev's $1.53 median came from a
+one-property edit and will not hold for a bounds pass over a wire codec or for a TLS fix with
+a seam: $12 and $15 are the honest figures, with $2 for the tooltip. The security engineer's
+two test tasks are writing rather than auditing, so $10 and $12 rather than $12.32 twice.
+Then build-dev $4, speech-dev $2, test-dev $1, the planner $12 for the contract and a
+contingency, five reviewer passes at $5, two tester passes at $4, and the lead's own session
+at about $40 — S-01's single run cost $67.45 across 23 tasks and this sprint has nine. The
+lead's line is the largest and the least predictable, and the two ways the figure breaks are a
+second core-dev attempt on T-27 if the seam is wrong, and this planning run itself if the cost
+hook bills it to S-02 rather than to the sprint that is closed.
+
+## J-0166 | 2026-11-15 | NOTE | lead
+- Decision: DEC-019's arrangement stands: the security engineer writes the batteries under Private/Security/, and no security review runs on the two implementation tasks whose tests it wrote.
+- Reference: DEC-019
+- Changes: none
+
+The planner asked for the lead's dispatch ruling, because requiring a security review on every task carrying a security: line would invert the arrangement and hand the batteries to test-dev instead. The arrangement stands, for one reason that is evidence rather than preference: the backstop against a battery asserting the wrong invariant is the tester's independent pass on the landed fix, and that is exactly where independence showed in S-01 - the tester opened F-031, F-032 and F-033 against US-028's fix after the coders and the gate were satisfied with it. The reviewer reads implementation and test together, which catches a test written to the code rather than to the criteria.
+
+The three costs the planner named are accepted as named: T-25 is written from F-021's repro and US-030's criteria rather than from T-24's diff; T-28 reads only the seam's declarations; and the security engineer does not review T-24 or T-27.
+
+## J-0167 | 2026-11-15 | F-047 | lead
+- Event: opened
+- Kind: quality
+- Severity: minor
+- Story: US-014
+- Module: M-neo4j
+- Repro: Neo4jComponent.cpp: InitiateConnection(const FString& Hostname, int32) is called only from :132 with the extracted hostname and from :1135 with a bare BackendHost, so the full-URL scheme-rewriting branch at :166-178 - which tests WsUrl.StartsWith("neo4j+s://") and five more - can never match its argument. The else at :180 always runs. The guarded upgrade at :186-187, 'if (bActiveTls && WsUrl.StartsWith(TEXT("ws://")))', is dead for a second and independent reason: when bActiveTls is true the else has already written 'wss://', and "wss://host".StartsWith("ws://") is false.
+- Changes: none
+
+Found by the planner while resolving CR-010's open question, and verified by the lead against the source and both call sites before logging.
+
+Two dead regions, not one, and they fail differently. The scheme-rewriting branch is unreachable because of what its caller passes; the ws-to-wss upgrade is unreachable because of what the branch above it already wrote. Each would survive the other's removal.
+
+Why it is only minor: nothing is wrong with the behaviour. Both transports take encryption from the single bActiveTls = UseSSL at :147, which is correct, and the dead code cannot produce a wrong answer because it cannot run. The cost is that the comment at :184 documents a capability the component does not have - 'Honor UseSSL even when the scheme didn't already imply TLS' - which is exactly the kind of sentence someone later defends in a review.
+
+Scheduling: US-032 removes the upgrade at :186-187 along with the property it refers to, so that half closes with F-011. The unreachable branch at :166-178 is not US-032's and must not be swept into it - P-07 - so this finding is what carries it. It is M-neo4j's, so core-dev's, and it wants no CR: deleting unreachable private code moves no contract and no surface.
+
+## J-0168 | 2026-11-15 | NOTE | planner
+- Stories: US-030, US-031, US-034
+- Decision: DEC-019
+- Changes: backlog.md
+
+US-030, US-031 and US-034 move from `ready` to `planned` for S-02, on the lead's acceptance of the plan in J-0165. US-032 stays `ready` and is held for S-03 with the `neo4j://` fact going back to the user before it is planned; US-033 stays `ready` and is out of S-02. No criterion and no Tests path moves with the status: the three stories are planned as they were refined.
+
+## J-0169 | 2026-11-15 | S-02 | lead
+- Event: opened
+- Goal: Close the two blocker findings that make the Bolt connection unsafe against a real server - an unbounded message reader (F-021) and a TLS path that authenticates nobody (F-020) - so that US-014 returns to done and the 5.8 ship stops waiting on them.
+- Stories: US-030, US-031, US-034
+- Budget: 160 USD at list prices, expected 143
+- Changes: sprint.md
+
+The user confirmed the goal before planning. Three things about this sprint's shape are deliberate and were argued rather than assumed.
+
+Two stories, not three. US-014's Blocked by line names F-020 and F-021 and not F-011, so closing exactly those two returns US-014 to done and unblocks US-020 and US-021; F-011 is on its Known defect line and on no critical path. US-032 is refined to ready and held for S-03 because it depends on the seam US-031 builds, so holding it costs no rework, and because shipping UseSSL's removal alongside US-031's verification change would put two breaking migrations of the same property of the same component into one release note.
+
+One coder owns the critical path. All of M-neo4j is core-dev's, so T-24 to T-27 run in sequence and the sprint is that chain. T-26 is parallel and exists so T-28 can assert the TLS context rather than the TLS decision - F-020 is a defect in the applying, not the deciding. The three US-034 tasks are off the chain.
+
+US-031 grew from S to M during planning, for a reason that is now a standing rule: its acceptance test cannot be written against today's code, because ShouldUseSSL, ExtractHostname, TcpConnect and bActiveTls are all private and non-static, TcpConnect opens a socket, and the only friend is FNeo4jRecvRunnable. So the story carries a seam as well as a fix. The rule is CR-009's, established for M-asr and applied here: a criterion is met by a test that exists, so a story whose test cannot be written owes the seam that lets it be.
+
+US-034 is off-goal. F-032's and F-033's tooltips do not serve a Neo4j sprint and are in it because the user asked for them in these words at planning: ride into S-02. Recorded so that the sprint's scope reads as a decision rather than as drift.
+
+## J-0170 | 2026-11-15 | DEC-020 | core-dev
+- Module: M-neo4j
+- Decision: FBoltPackStreamReader refuses rather than clamps, through one Require(N) gate called before every read, Reserve and Append, and one funnel that turns any refusal into a null value; nesting is bounded at 64 containers by a depth parameter rather than a member counter.
+- Reason: F-021's four unsafe paths share one arithmetic question -- are N more bytes available -- so they share one checked function instead of four inline comparisons. Require(N) refuses a negative N as well, which is what closes the signed int32 length and count cases. A declared element count is bounded by the same test because every element costs at least one byte, so a count larger than the bytes remaining is rejected before Reserve is reached, never after it. ReadValue(Depth) calls ReadMarkedValue and returns null whenever bRefused is set, so a refusal at any level of the recursion propagates outwards and a partially decoded value is never returned; Refuse() sets Cursor to Data.Num() so HasMore() reports exhausted and the next ReadValue refuses at once, and because Require short-circuits on bRefused only the first refusal logs. Depth is a parameter, not a member: there is no decrement for a return path to forget, which is the failure mode the verification profile asks to be checked for. 64 containers is eight times the deepest shape a Neo4j server builds from stored data (RECORD -> field list -> Path -> node list -> Node -> property map -> list), leaves room for a query returning its own nested literals, and bounds the reader's stack to a few kilobytes.
+- Changes: none
+
+Alternatives rejected: clamping a length to the bytes remaining, which decodes a truncated message as if it were whole and hands the caller a value it cannot distinguish from a real one -- refusal is the only answer that keeps the contract honest. A member depth counter incremented and decremented around the recursive calls, rejected because every early return becomes a place to leak the count. Separate bounds checks written inline at each of the four call sites, rejected as four chances to put the check after the act. Tightening the map bound to 2*Count (a pair is two values), rejected because 2*Count overflows int32 for a hostile count while Count alone is already a sufficient necessary condition. The 36 existing codec tests pass unchanged: every one feeds the reader bytes the writer produced, and Require's bound on a declared count is a necessary condition for well-formed input, so it never refuses valid data -- checked against the tightest cases in the suite, an empty list header, a 15-element tiny list and a structure whose fields end the buffer.
+
+## J-0171 | 2026-11-15 | DEC-021 | core-dev
+- Module: M-neo4j
+- Decision: The Bolt message cap is 16 MiB, enforced in UNeo4jComponent::OnDataReceived before the bytes reach the dechunker, counted as bytes handed over since the dechunker last produced a complete message (UnresolvedMessageBytes); on a refusal the partial message is discarded, the dechunker is reset and the connection is left standing.
+- Reason: FBoltDechunker carries no FANTASIA_API and gains none (F-012 stays deferred, and widening C-neo4j's surface is not what CR-004 admits), so the cap goes on the component's side, where UNeo4jComponent's class-level FANTASIA_API already exports the private members and a friend struct FNeo4jTestAccess reaches them. The counter is the component's honest view of an in-flight message: it is never less than the partial message the dechunker holds, so testing it before Accumulate bounds that message without reaching inside the dechunker. 16 MiB bounds ONE message, not one result set -- a PULL answers with one RECORD message per row plus a terminating SUCCESS, so a large result set is many bounded messages and never one big one, which is the objection the story raises against a cap. 16 MiB is 1024 maximum-size (16 KiB) Bolt chunks and three orders of magnitude above any single row the component can usefully convert into UNeo4jResultCell objects for Blueprint.
+- Changes: none
+
+What the component enforces is the cap plus at most one transport read, because the counter is zeroed when a message completes and a read that completes a message may carry the first bytes of the next one. The TCP recv buffer is 16384 bytes (Neo4jComponent.cpp:423), so the slack is 16 KiB against a 16 MiB cap. An exact bound would require the dechunker to report its partial size, which is a change to a class this task must not widen. Alternatives rejected: enforcing the cap inside FBoltDechunker, which is the natural home for it and is refused because the test module cannot link the class -- the sprint's standing decision is that this stops for a CR rather than exporting a class in passing. Tearing the connection down on a cap refusal, which is what a framing violation deserves and is NOT done here: the story asks only that the partial message be discarded with a logged reason, the tester's plan asserts the connection survives the refusal, and a teardown is behaviour P-07 keeps out of this task. The residual is that after a refusal the byte stream cannot be resynchronised -- subsequent bytes are read as chunk headers at an arbitrary offset -- so the connection reports itself healthy while decoding nothing. That is now bounded and memory-safe but it is a defect, and it is reported to the lead rather than fixed here. Also moved the dechunker's construction from InitiateConnection to the constructor, so the receive path is well defined before any connection and a test can drive OnDataReceived; InitiateConnection resets the dechunker instead of replacing it, which is the same per-connection state and one creation site instead of two.
+
+## J-0172 | 2026-11-15 | F-048 | lead
+- Event: opened
+- Kind: bug
+- Severity: major
+- Story: US-030
+- Module: M-neo4j
+- Repro: After UNeo4jComponent::OnDataReceived refuses a message for exceeding MaxBoltMessageBytes it calls Dechunker->Reset(), so the next bytes off the socket are read as a chunk header from an arbitrary offset in the middle of the server's framing. The Bolt byte stream is then unresynchronisable: the connection reports itself healthy and decodes nothing but unknown markers, with no error delivered to the component's delegates.
+- Changes: none
+
+Raised by the lead from core-dev's T-24 report, where it is recorded only as a rejected alternative inside DEC-021. Opening it because a defect that lives in a DEC's rejected-alternatives section will never be scheduled, which is the same reason the EOL-OpenSSL risk was not left in the threat model's prose.
+
+This is the residual of F-021's fix rather than a defect in it. F-021 asked that a hostile or faulty server not drive an out-of-range read, and it no longer can: the reader is bounded and memory-safe and the cap is enforced before accumulation. What the fix does not do is recover the framing, and core-dev was right to keep that out under P-07 - the honest repair is to tear the connection down on a framing violation, which US-030 does not ask for and which the tester's stress plan explicitly expects not to happen ('the connection survives the refusal').
+
+Why major rather than minor: the user-visible result is a component that reports itself connected while answering nothing, with no diagnostic. For a researcher whose agent depends on Neo4j that is indistinguishable from a hang, and the log line naming the cap is the only trace. Why not blocker: the trigger is a message exceeding 16 MiB, so it takes a hostile or badly faulty server to reach, and reaching it no longer corrupts memory.
+
+Kind is recorded as bug, deliberately not security. The trigger is attacker-controlled and a server able to force one refusal can keep the connection useless indefinitely, which is a denial of service and arguably makes this a security finding - but under CR-004 that classification decides what the 5.8 line admits, and only the security engineer's ruling carries the provenance the carve-out tests for. T-25's brief asks it to rule.
+
+## J-0173 | 2026-11-15 | NOTE | security
+- Event: rewritten
+- Story: US-030
+- Module: M-neo4j
+- Changes: threat-model.md
+
+F-021's threat is now mitigated with a test battery as the evidence, and F-048 is ruled a bug rather than a security finding.
+
+T-25 put 18 tests under FANTASIA/Source/FANTASIATests/Private/Security/BoltPackStreamBoundsTests.cpp, with the FNeo4jTestAccess seam in a sibling header so that US-031's file can share one definition of the struct rather than two. They are written from US-030's five acceptance criteria and F-021's reproduction, not from T-24's diff (DEC-019): every criterion has an assertion, each refusal's log is counted with an exact occurrence number so a reader that logged per recursion level or per later call fails, and two tests assert the duals -- nesting within the limit decodes, and a value ending on the buffer's last byte decodes while the same value one byte short is refused. Without those duals the whole battery would also pass against a reader that refused everything, which is the one failure mode the arrangement's missing independent check cannot otherwise catch. The gate reports 168 tests, 0 failures.
+
+F-048, ruled: Kind stays bug. It passes the STRIDE test on denial of service -- the trigger is attacker-controlled across TB-4, one 16 MiB message suffices, the effect outlasts the attacker, and the component reports itself healthy throughout -- so on the letter of my own brief it is mine. The reason it is not is the same reason the EOL OpenSSL is an Open risk rather than a finding (J-0137): under CR-004, Kind=security is not a neutral act of record-keeping, it licenses the fix onto the shipped 5.8 line whatever surface it touches. The only fix available for an unresynchronisable byte stream is a connection teardown on a framing violation, which changes what C-neo4j promises about a connection, fires on a merely faulty server as readily as on a hostile one, and lands in the disconnect path beside a live receive thread. Taking that unbarred is a larger risk than the one it answers; a defect whose admitted fix I would not let anyone act on is not a security finding. The threat model records three conditions that flip the ruling, the sharpest being a cap refusal reachable by a message a legitimate server sends. Checked while ruling: Dechunker->Reset() has exactly two call sites, per-connection at Neo4jComponent.cpp:141 and the refusal at :579, so the mid-stream desync is reachable only past 16 MiB.
+
+Also corrected in the M-neo4j section: F-011 was recorded as excluded from the 5.8 line by CR-001, when CR-004 admitted it and CR-010 chose its shape. UseSSL stays in the entry-point list, because it is still in the header -- US-032 is ready, not done, and a state document that describes a tree which does not exist is worse than one a story will update. The line now says what is true today instead: BeginPlay forces the property for nine of the ten schemes (Neo4jComponent.cpp:119-125), so it is honoured only for neo4j:// and for a schemeless endpoint.
+
+## J-0174 | 2026-11-15 | NOTE | lead
+- Finding: F-048
+- Reference: CR-004
+- For: S-02 retrospective
+- Changes: none
+
+A side effect of CR-004 worth examining at the retrospective, noticed because the security engineer has now declined the security label twice for the same reason.
+
+CR-004 made Kind=security an authorisation and not only a classification: a finding logged security by the security engineer at blocker or major is admitted to the shipped line whatever its surface. The security engineer has now twice declined to apply the label because of what it would license rather than because of what the defect is - the EOL OpenSSL pin (J-0137) and F-048 (J-0173). In both cases its reasoning is sound and it offered the ordinary route instead, a story on the next line or a CR to the user, so nothing is hidden and nothing is lost.
+
+But the carve-out was written to admit security fixes, and its effect here is to make the project's security engineer withhold the label to avoid admitting a fix it judges worse than the defect. That is the bar working in one sense and inverted in another: classification now requires weighing the remedy, which is a harder judgement than describing the defect and one the classifier has an incentive to get wrong in the conservative direction.
+
+No change proposed. Three things to weigh at the retrospective: whether a finding's kind should carry authorisation at all, or whether the carve-out should test severity and provenance while admission stays a separate step; whether 'Open risk with its trigger conditions written down' deserves to be a first-class state rather than the absence of a finding; and whether this has cost anything yet - so far it has not, because both defects are recorded with their flip conditions.
+
+## J-0175 | 2026-11-15 | NOTE | lead
+- Finding: F-048
+- Module: M-neo4j
+- Changes: none
+
+The security engineer's ruling (J-0173) stands: F-048 is Kind=bug, routed the ordinary way - a story on the 5.9 line, or a change request if the user wants it on 5.8. Its three flip conditions are in the threat model, and it verified the second while ruling: Dechunker->Reset() has exactly two call sites, Neo4jComponent.cpp:141 per connection and :579 on the refusal, so the mid-stream desync is reachable only past 16 MiB.
+
+Worth scheduling separately from the ruling, because it is the better half of the fix and needs none of the risk: the damaging part of F-048 is 'reports itself healthy', not 'cannot resynchronise'. Having the component stop reporting itself ready after a cap refusal, and log on each subsequent read, addresses the half that makes the defect indistinguishable from a hang. It is not a teardown, so it does not fire on a merely faulty server, does not contradict the tester's stress plan that the connection survives the refusal, and does not touch the disconnect path beside the live receive thread where a half-done teardown is a use-after-free - which is why the full fix was rejected. M-neo4j's to judge.
+
+## J-0176 | 2026-11-15 | NOTE | lead
+- For: T-32
+- Story: US-030
+- Changes: none
+
+C-neo4j must not state the nesting limit as '64 containers'. Verified in the source: BoltPackStream.cpp:178 declares MaxBoltNestingDepth = 64 and :294 tests 'if (Depth >= MaxBoltNestingDepth)' against a zero-based depth, so depths 0 to 63 are entered and the element inside the 64th container is refused. The effective maximum a server can send is therefore 63 nested containers with a payload inside, which is what FANTASIA.Security.Bolt.Reader.NestingAtDepthLimitDecodes pins.
+
+Found by the security engineer while writing the battery and confirmed by the lead. It is not a defect - the constant is named 64 and the refusal message says 64, so code and log agree - but a contract that says 64 would be wrong by one in the direction that matters, since it is the number a server author would build to. T-32 should state what a message may contain rather than what the counter reaches, and the wording is core-dev's to approve.
+
+## J-0177 | 2026-11-15 | F-049 | lead
+- Event: opened
+- Kind: quality
+- Severity: minor
+- Story: US-034
+- Module: M-llm
+- Repro: OpenAICompatibleComponent.h:18, the ELLMProvider enum's own doc comment, directs the reader to 'UOpenAICompatibleComponent::ApplyPreset' - the C++ symbol. The Blueprint node is 'Apply Provider Preset' (meta = (DisplayName = ...) at :144), which is the only name a user of the enum in a graph ever sees.
+- Changes: none
+
+Surfaced by core-dev during T-29 and deliberately left: the task said one doc comment is the whole diff, and it held to that rather than widening. The right call, and the reason this entry exists - a one-word fix nobody logs never happens.
+
+Same defect class as F-032 at one remove. F-032 was that the APIKey tooltip did not warn what Apply Provider Preset does to a configured key; this is that a sibling comment in the same file names a symbol the user cannot type. Minor rather than major because the consequence is a reader who cannot find the node, not a credential that goes somewhere unexpected.
+
+Scheduling: it wants no task of its own. It rides into whichever core-dev task next opens this file, and the fix is replacing one symbol with the display name read from the UFUNCTION below it, the way T-29 verified all three names it used.
+
+## J-0178 | 2026-11-15 | DEC-022 | build-dev
+- Module: M-dist
+- Decision: FANTASIATests links the ENGINE OpenSSL module via AddEngineThirdPartyPrivateStaticDependencies(Target, "OpenSSL"), so T-28 can read SSL_CTX verification state; no ADR is raised.
+- Reason: A test-module dependency is not a shipped dependency: FANTASIATests is not among the plugin's shipped modules, so nothing a user links changes and P-06 does not engage. F-020 is a defect in the applying, not the deciding -- the code chooses TLS correctly and then builds a context that verifies nobody -- so a test that cannot inspect SSL_CTX could only re-assert the decision, which was never wrong.
+- Changes: none
+
+Alternatives rejected: (1) adding the plugin's own OpenSSL 1.1.1t include/lib paths as FANTASIA.Build.cs:54,56 do -- the test module has no reason to inherit the duplicate copy (F-044, open: the engine module at :48 and the bundled copy are byte-identical under SHA-256), and using the engine module in the new place means F-044's fix does not have to come back and fix this file too; (2) a public rather than private dependency -- nothing downstream of FANTASIATests exists, so private is the smaller surface; (3) asserting the TLS decision only, with no OpenSSL dependency -- that is the assertion F-020 shows to be insufficient. Gate: 168 tests, 0 failures, both before and after; the diff is three lines, one of them code.
+
+## J-0179 | 2026-11-15 | F-050 | test-dev
+- Event: opened
+- Story: US-034
+- Module: M-llm
+- Kind: bug
+- Severity: minor
+- Repro: FANTASIA.Secrets.Tooltip.ApplyPreset (SecretConfigTests.cpp): read UFunction ApplyPreset ToolTip metadata
+- Changes: none
+
+The F-032 warning in the ApplyPreset doc comment never reaches the Blueprint node. UHT keeps only the @brief line and the @param line as the function's ToolTip metadata (observed text: '@brief Overwrites Config with the built-in preset for the given provider.' newline '@param Provider ...'); the paragraph that names 'Apply Provider Preset', says APIKey is discarded and that DefaultGame.ini keys are lost is dropped. A user hovering the node in the editor sees none of it; it exists only in the header. The property comment on Headers (F-033) does survive in full. Fix is core-dev's, in OpenAICompatibleComponent.h: put the warning in the brief sentence, or in a tooltip UFUNCTION meta key, so it appears in the reflected ToolTip. The test is marked expected-failure on this finding; when it is fixed the expected-error line fails and is to be deleted.
+
+## J-0180 | 2026-11-15 | DEC-023 | core-dev
+- Module: M-neo4j
+- Story: US-031
+- Task: T-27
+- Decision: The chain is verified against the engine's own certificate bundle, found the way the engine's TLS stack finds it: the host project's Content/Certificates/cacert.pem if it exists, otherwise Engine/Content/Certificates/ThirdParty/cacert.pem, loaded with SSL_CTX_load_verify_locations and refused when the load does not return 1.
+- Reason: SSL_CTX_set_default_verify_paths is not the alternative it appears to be on this platform. It resolves to the OPENSSLDIR compiled into the engine's static OpenSSL 1.1.1t build, which nothing populates, and it does not read the Windows certificate store at all - so it would load no anchors and every verified connection would fail, everywhere, including the Aura case the feature exists for. The engine bundle makes the guarantee statable: a server the engine's own HTTPS trusts is a server this component trusts, so a project has one trust store rather than two, and the project-content path is the documented place a site adds a private or corporate root. It also gives the explicit load return the story asks for, which the alternative route through the engine's SSL module cannot: ISslCertificateManager::AddCertificatesToSslContext returns void.
+- Changes: FANTASIA/Source/FANTASIA/Private/Neo4jComponent.cpp
+
+Alternatives rejected: (1) SSL_CTX_set_default_verify_paths, for the reason above - on Windows it is a silent no-op, which is F-020 with more code in it. (2) The engine's SSL module (FSslModule::Get().GetCertificateManager()->AddCertificatesToSslContext). It is the most faithful answer to 'what does the engine trust', since it honours the SSL section's OverrideCertificateBundlePath and the per-platform bundle as well, but it returns void, so a failed load is unobservable and the story's 'load return value is tested' criterion cannot be met without counting X509_STORE objects afterwards; and it needs the SSL module added to FANTASIA.Build.cs, which is build-dev's file and a second round trip on the critical path. (3) The Windows system store via CertOpenSystemStore, which would serve the corporate-proxy user directly but is a platform-specific store walk this plugin has no other use for, and leaves the engine and the component disagreeing about what is trusted. The one case the chosen store does not cover is a machine whose only anchor for the server is in the Windows store: for that user the remedy is in the refusal message - put the root in the project's bundle, or use +ssc deliberately. The per-platform candidate the engine also searches (Certificates/Windows/cacert.pem) is omitted because no such bundle ships for Win64 and this plugin is Win64-only; adding it would be a path that can never match.
+
+## J-0181 | 2026-11-15 | DEC-024 | core-dev
+- Module: M-neo4j
+- Story: US-031
+- Task: T-27
+- Decision: The seam splits the connection's security into a decision and its application, and carries the host with the decision. DecideTransportSecurity(SchemeUrl, TargetHost, Transport, UseSSL) returns an FNeo4jTlsDecision as data; ApplyTlsVerification(void* SSL_CTX, Decision, OutFailure) configures a context the caller owns; TcpConnect takes the decision instead of (Hostname, Port, bUseTls); ExtractHostname, ShouldUseSSL and SchemeRequiresRouting become static; bActiveTls and ActiveHostname are replaced by one ActiveSecurity member. Six readers and two forwarders are added to FANTASIATestAccess in Private/Security/Neo4jTestAccess.h. No FANTASIA_API, no UPROPERTY, UFUNCTION, delegate or enum change.
+- Reason: F-020 is a defect in the applying, so a seam that exposes only the decision would not pin it. Making the applier take an SSL_CTX by void* is what lets a test own the context and read SSL_CTX_get_verify_mode off it, and void* is the convention the component already uses for SslCtx so no OpenSSL header enters a public header. Folding Hostname into the decision is the structural answer to the routing question: there is one string, used for BIO_set_conn_hostname, for SNI and for the X509 verification parameter, so the host connected to and the name verified cannot drift apart.
+- Changes: FANTASIA/Source/FANTASIA/Public/Neo4jComponent.h
+
+Alternatives rejected: (1) Keeping TcpConnect's (Hostname, InPort, bUseTls) signature and verifying inside it. The verification would then be unreachable from a test without a server, and - the worse half - the host connected to and the host verified would be two values a future edit could let differ, which is exactly how the routing redirect stays open while looking closed. (2) Passing the SSL_CTX as a typed SSL_CTX*, which would put openssl/ssl.h into a public header the whole plugin and the test module include. (3) A decision function taking only the endpoint, as the story's first criterion reads. It cannot express the reconnect: ReconnectToBackendAddress targets a host the server named through the routing table, so the scheme's promise and the host it applies to arrive from different places. The function therefore takes both, and the rule it encodes is that the scheme comes from the configured endpoint, always, and the host from the connection being made. (4) Branching on Transport inside the decision. Both framings make the same promise per scheme, so the parameter is named and discarded; the difference that is real - the WebSocket client verifies regardless and cannot honour +ssc - is logged as a warning at connect time and is C-neo4j's to state (T-32). (5) Leaving ActiveHostname beside ActiveSecurity.Hostname. They are the same value on every live path, and two copies of the verified host is the bug class this story exists to close.
+
+## J-0182 | 2026-11-15 | DEC-025 | core-dev
+- Module: M-neo4j
+- Story: US-031
+- Task: T-27
+- Decision: The verification is applied to the context before the BIO exists, so a refusal costs no socket; the handshake-failure branch, not a later check, is where the certificate's rejection is explained, because SSL_VERIFY_PEER aborts the handshake; SSL_get_verify_result is then inspected again after a successful handshake as an independent gate; and a verifying decision with an empty hostname is refused outright.
+- Reason: With SSL_VERIFY_PEER a self-signed certificate never reaches a post-handshake check - BIO_do_handshake returns <= 0 - so a message written only after the handshake would never be the one a user sees. SSL_get_verify_result is set on the aborted handshake as well, which is what lets the refusal name the actual check (an untrusted issuer and a name mismatch have different remedies) rather than print an opaque ERR string. The post-handshake inspection is not redundant: it is the only thing that fails a context which completed a handshake without verifying, which is precisely the state F-020 shipped, so it tests the applying rather than trusting it. Applying to the SSL_CTX before BIO_new_ssl_connect is required, not stylistic: SSL_new inherits the verify mode and the X509_VERIFY_PARAM at creation.
+- Changes: none
+
+Every refusal sets ConnectionState to Failed and returns from TcpConnect before SendBoltHandshake, so HELLO and the LOGON that carries user and password are unreachable by construction and not by a check. Both messages name bolt+ssc:// and neo4j+ssc:// as the migration, and the certificate message also prints the trust store path that was used, because a user whose anchor is in the Windows store needs to know which file to add it to.\n\nThe empty-hostname guard exists because verification against no name is verification against anything: X509_VERIFY_PARAM_set1_host with an empty string clears the host list and returns success, so without the guard an endpoint that parsed to nothing would verify the chain and silently skip the name. It is also the one deterministic, offline refusal the suite has, which is how T-28 can show LOGON is unreachable without a server.\n\nOne limit on what T-28 can assert, found while choosing this shape and reported to the security engineer: the engine ships OpenSSL 1.1.1t, where X509_VERIFY_PARAM is opaque and X509_VERIFY_PARAM_get0_host does not exist (it arrives in 3.0). The hostname set on the context cannot be read back as a string. What is readable on a context the test owns is SSL_CTX_get_verify_mode == SSL_VERIFY_PEER, and X509_VERIFY_PARAM_get_hostflags == X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, which is a non-default value nothing else in the process sets, so it witnesses that the component wrote the host parameters on that exact context. Partial wildcards are off as a hardening choice in its own right - RFC 6125 discourages them and no Neo4j deployment needs them - and not as a test hook.
+
+## J-0183 | 2026-11-15 | NOTE | core-dev
+- Task: T-27
+- Story: US-031
+- Decision: DEC-023, DEC-024, DEC-025
+- Changes: FANTASIA/Source/FANTASIA/CLAUDE.md
+
+M-neo4j's tree-level state document gains the invariant the three decisions above establish: an encrypted connection in this tree is an authenticated one, by four steps each of which is present and asserted. Recorded there because the next coder to open a TLS connection in this tree reads that file and not this entry, and because three of the four steps is the defect it closes.
+
+## J-0184 | 2026-11-15 | F-051 | test-dev
+- Event: fixed
+- Finding: F-050
+- Evidence: Withdrawn: first runs read a stale compiled header; after a rebuild the ApplyPreset ToolTip carries the whole comment (FANTASIA.Secrets.Tooltip.ApplyPreset green)
+- Changes: none
+
+Not a defect.
+
+## J-0185 | 2026-11-15 | F-050 | test-dev
+- Event: fixed
+- Evidence: Withdrawn: stale compiled header in the first runs; ToolTip carries the whole comment after rebuild
+- Changes: none
+
+Not a defect.
+
+## J-0186 | 2026-11-15 | F-051 | test-dev
+- Event: fixed
+- Evidence: Mistaken entry made while closing F-050; no defect
+- Changes: none
+
+Not a defect.
+
+## J-0187 | 2026-11-15 | NOTE | lead
+- Finding: F-050, F-051
+- Status: void - neither is a defect and neither is a fix
+- Changes: none
+
+Both entries are void and must not be counted among S-02's fixed findings. Recorded here rather than left to be ignored, because 'ignore these' is not a thing a journal can carry and the next reader will meet the entries before any instruction about them.
+
+F-050 (J-0179 opened, J-0185 fixed) was opened by test-dev in good faith: the ApplyPreset tooltip read back as only its @brief and @param lines, which looks exactly like a UHT truncation. It was a stale compiled copy. A later run, after the harness recompiled, showed the full comment, and test-dev found this itself, corrected its test and closed the entry. There was never a defect, so there was never a fix.
+
+F-051 is a phantom: it has two 'fixed' events (J-0184, J-0186) and no 'opened' event at all, created by the first attempt to close F-050. ateam_check.py reports 0 errors against it, so the tooling tolerates a finding that was resolved without ever being raised.
+
+The underlying cause is the F-entry vocabulary, and this is the third distinct consequence of it in two sprints. --event accepts only accepted, fixed and opened, so there is no way to annotate a finding (J-0128 went under NOTE), no way to re-point one (F-018 needed an 'opened' entry carrying Corrects= at J-0145), and no way to withdraw one that was opened in error - which leaves 'fixed' as the only exit and makes a mistaken finding indistinguishable in the record from a repaired defect. Worth raising at the retrospective as a change to ATeam rather than to this project: a 'withdrawn' event, and a check that a finding has an 'opened' entry before it can be closed.
+
+## J-0188 | 2026-11-15 | NOTE | lead
+- For: S-02 retrospective
+- Reference: US-027
+- Changes: none
+
+The harness lock serialises gate runs. It does not serialise edits, and that is a dispatch problem rather than a gate defect.
+
+T-31 reported several gate runs failing to compile Neo4jComponent.cpp with ActiveHostname and bActiveTls undeclared. That was T-27 mid-edit, not T-31's code, and it cleared by itself. Nothing was lost, but the runs were wasted and the diagnosis cost test-dev real turns: it had to work out that a compile error in a file it had never touched was not its problem. It also means T-31's own 170/0 is a result for the tree as it stood at that moment and not for the tree now, since T-27 has continued editing since.
+
+This is my error, not the gate's. The lock answers 'two runs must not overlap', which was F-035's question. It cannot answer 'this run must not compile a tree someone is halfway through changing', because a run has no way to know another agent is editing.
+
+The rule it produces, for the next sprint's dispatch: two tasks may run in parallel only when neither compiles the other's files. Different owners and non-overlapping paths are not sufficient - T-31 owned SecretConfigTests.cpp and T-27 owned Neo4jComponent.cpp, which do not overlap at all, and the gate compiles both because the test module links the runtime module. Parallel is safe for tasks that touch no code (documents, memory, the journal) and for one code task beside any number of non-code ones. Two code tasks in one module's compile unit go in sequence, whatever their ownership says.
+
+Worth weighing at the retrospective against the obvious alternative, which I do not recommend: having the gate take a tree snapshot. That would make each run self-consistent and would also hide exactly this collision, so the wasted runs would become silently stale passes - the failure mode F-035 existed to remove.
+
+## J-0189 | 2026-11-15 | F-052 | lead
+- Event: opened
+- Kind: quality
+- Severity: major
+- Story: none
+- Module: none
+- Repro: Two cross-ownership edits happened in S-02 and .ateam/ownership.jsonl is empty, so neither was recorded. (1) core-dev added six members to FANTASIA/Source/FANTASIATests/Private/Security/Neo4jTestAccess.h in T-27 - verified present at lines 78, 91, 97 - and team.json gives that directory to security. (2) test-dev rewrote FANTASIA/Source/FANTASIATests/CLAUDE.md in T-20 and again in T-31, and team.json gives that exact file to planner. ateam_check.py reports '0 would-be violation(s) logged since S-02 opened, 0 in all'.
+- Changes: none
+
+This matters because of what the empty log is being used for. The adoption named S-01 the observation window and the checker states the rule: 'enforcement needs a sprint that logs none'. The project is therefore on course to switch ownership out of observe mode on the evidence that nothing was logged - and that evidence is void, because at least two boundary crossings occurred and were not logged. An empty log means the hook did not see them, not that nobody crossed.
+
+I caused both edits and neither agent is at fault: T-27's brief told core-dev to extend the existing seam header rather than duplicate it, and T-31's brief told test-dev that FANTASIATests/CLAUDE.md was its file. core-dev flagged its own crossing in its report and asked that it be confirmed with security rather than left implicit, which is the behaviour the method wants and the only reason this was noticed at all.
+
+What I did not establish, and what someone should: why the hook recorded nothing. The candidates are that it does not fire for subagent edits, that its path matching misses these cases, or that observe mode records nothing rather than recording would-be violations - which would make the mode useless for its stated purpose. That is ATeam tooling rather than this project's code, so it is a change to ATeam, and the finding stays here because the decision it corrupts is this project's.
+
+Until it is resolved, the honest position is that this project has no measurement of ownership violations, and the team change that would switch enforcement on has no evidence behind it.
+
+## J-0190 | 2026-11-15 | F-053 | lead
+- Event: opened
+- Kind: quality
+- Severity: minor
+- Story: none
+- Module: M-tests
+- Repro: docs/ateam/team.json lists FANTASIA/Source/FANTASIATests/CLAUDE.md under planner's owns, while that file's own header reads 'Owner: test-dev. Inside it, Private/Quality/ and Private/Stress/ are the tester's and Private/Security/ is the security engineer's'. The two state documents name different owners for the same file.
+- Changes: none
+
+Found while checking F-052. It is the reason I briefed test-dev twice to edit a file team.json does not give it - I read the owner from the file's own header, which is where a coder would look.
+
+Minor because nothing broke: ownership is in observe mode, both edits were correct in substance, and the planner has in practice let test-dev maintain that document. But it is a state inconsistency of exactly the kind the two-document rule exists to prevent, and it will matter the moment enforcement is switched on, because then one of the two documents starts refusing edits the other invites.
+
+Either answer is defensible and the choice is the user's, since ownership is a team change: the planner owns every docs-shaped file including module state documents, or a module's CLAUDE.md belongs to the module's coder as its header says. What cannot stand is both.
+
+## J-0191 | 2026-11-15 | F-054 | lead
+- Event: opened
+- Kind: quality
+- Severity: minor
+- Story: US-032
+- Module: M-neo4j
+- Repro: Neo4jComponent.cpp:824-827, OnWebSocketConnectionError's diagnostic, advises the user to 'try Use SSL=true' and hardcodes 'URL=ws://%s:%d' regardless of the transport actually attempted. US-032 removes the UseSSL property (CR-010, approved), after which this message names a property that does not exist.
+- Changes: none
+
+Noticed by core-dev during T-27 and left alone deliberately under P-07, which was right - it is not US-031's. Logging it so the removal does not leave the advice behind.
+
+Two separate defects in one message. The advice will become false when CR-010 lands, and the right replacement is the scheme, since after US-032 the scheme is the only thing that decides encryption: a user whose server requires TLS changes bolt:// to bolt+s://, not a checkbox. The hardcoded ws:// is wrong already for a wss:// attempt, which is a smaller version of the same confusion.
+
+Scheduling: this belongs with US-032 rather than on its own, because the correct new wording depends on what US-032 decides the user should do instead. Its Story field says US-032 for that reason.
+
+## J-0192 | 2026-11-15 | F-055 | security
+- Event: opened
+- Story: US-031
+- Module: M-neo4j
+- Kind: security
+- Severity: major
+- Repro: grep -rn 'bDisableCertValidation|lws-insecure' FANTASIA/Source FANTASIAACE/Source returns nothing, against LwsWebSocketsManager.cpp:93,97 and LwsWebSocket.cpp:554-566,741,746-749 in the engine; and FANTASIA/Source/FANTASIA/Private/Neo4jComponent.cpp:310-329 maps eight schemes but not wss+insecure://, reachable from :1351-1368 with a routing record the server supplies. End to end: set [LwsWebSocket] bDisableCertValidation=true in DefaultEngine.ini, point a neo4j+s:// endpoint with Transport=WebSocket at a server behind a self-signed certificate, and the connection authenticates.
+- Changes: none
+
+On the WebSocket transport the component's security decision does not govern the
+connection. `DecideTransportSecurity` returns the same answer for both framings, as it
+should, but only `TcpConnect` applies it: the WebSocket branch builds a URL string and
+hands it to the engine's WebSockets module, and from there two inputs the decision never
+sees determine whether the server is authenticated.
+
+**1. An engine-wide switch the plugin cannot observe.** `FLwsWebSocketsManager` reads
+`[LwsWebSocket] bDisableCertValidation` from `GEngineIni`
+(`LwsWebSocketsManager.cpp:93`) and also accepts `-lws-insecure=true` on the command line
+(`:97`). When it is set, the certificate callback forces `PreverifyOk = 1` and skips the
+chain check and `VerifySslCertificates` entirely (`LwsWebSocket.cpp:554-566`), and the
+client flags become `LCCSCF_USE_SSL | LCCSCF_ALLOW_SELFSIGNED` for every `wss://`
+connection in the process (`:741`). An integrator who sets that key for an unrelated
+development endpoint, or ships a shortcut carrying that switch, silently removes server
+authentication from the Neo4j connection as well. `neo4j+s://` over WebSocket then encrypts
+without authenticating and `LOGON` carries `user` and `password` to whoever answers, which
+is F-020's consequence by another route. The plugin reads neither the key nor the switch
+(grep over `FANTASIA/Source` and `FANTASIAACE/Source` returns nothing), so it cannot warn,
+and C-neo4j is about to state the guarantee unconditionally.
+
+**2. A scheme the server can choose.** `InitiateConnection` builds the WebSocket URL from
+its raw `Hostname` argument, not from `ActiveSecurity.Hostname`. When that argument contains
+`://` it is mapped by eight `StartsWith` branches (`Neo4jComponent.cpp:310-322`) which do not
+include `wss+insecure://` — a scheme the engine's client accepts and which means
+`LCCSCF_USE_SSL | LCCSCF_ALLOW_SELFSIGNED` (`LwsWebSocket.cpp:746-749`). The following
+upgrade (`:329`) tests `StartsWith("ws://")`, which that string does not match, so it passes
+through verbatim. The one caller that can supply such a string is the server:
+`ReconnectToBackendAddress` splits the routing record on its last colon and passes the rest
+as the host (`Neo4jComponent.cpp:1351-1368`). So a server reached over a verified
+`neo4j+s://` WebSocket connection can answer the routing query with
+`wss+insecure://evil.example.com:7687` and have the client reconnect, unverified, to a host
+of its choosing and authenticate there. The planner's note on US-032 that this branch is
+dead because both call sites pass a bare hostname holds for a well-behaved server and not
+for a hostile one. On the plain TCP transport the same record is harmless, because
+`DecideTransportSecurity` runs `ExtractHostname` over it and the scheme is stripped before
+`BIO_set_conn_hostname` sees it.
+
+Why this is not F-020 and not covered by US-031's tests: F-020 was the applying of the
+decision on the transport that applies it, and T-27 scoped the fix to that transport
+deliberately (DEC-024's fifth alternative). This is the transport where there is nothing to
+apply it to, which is a different claim and one C-neo4j is about to make wrongly.
+
+**The fix, and what it costs.** Route (2) closes inside M-neo4j in a few lines and fails
+closed: build the WebSocket URL from `ActiveSecurity.bEncrypt` and `ActiveSecurity.Hostname`
+only, which deletes the eight-branch block US-032 already plans to remove, and gives that
+deletion a security reason rather than a tidiness one. Route (1) cannot be closed inside the
+plugin, only reported: either C-neo4j scopes the guarantee to the plain TCP transport and
+says that on WebSocket the engine's stack owns verification and a project-level switch can
+disable it, or the component reads the same key through `GConfig` at connect time and warns
+once. The documentation half is the minimum and costs nothing; it belongs with T-32, which
+already owes C-neo4j the statement that `+ssc` cannot be honoured over WebSocket. Both
+halves are admissible on the 5.8 line under CR-004, and neither is the kind of fix that is
+riskier than the risk it answers — which is why this is a finding and F-048 is not.
+
+## J-0193 | 2026-11-15 | NOTE | security
+- Task: T-28
+- Story: US-031
+- Module: M-neo4j, M-tests
+- Decision: DEC-023, DEC-024, DEC-025
+- Changes: threat-model.md
+
+US-031's battery, eleven tests in
+`FANTASIA/Source/FANTASIATests/Private/Security/Neo4jTlsVerificationTests.cpp`, and the
+threat model rewritten around what it now proves. The gate reports 181 tests, 0 failures,
+up from 170.
+
+**Every assertion about verification is read off an `SSL_CTX` this file creates and the
+component configures.** That is the point of the shape T-27 chose, and it is what separates
+this battery from one that watches a connection fail: F-020 was a defect in the applying,
+so the application is what is read. `Decision.*` calls `DecideTransportSecurity` with no
+component in existence — ten schemes on both framings with both values of `UseSSL`, forty
+decisions, all four fields of each — and `Context.*` hands the decision to
+`ApplyTlsVerification` on a context the test owns and reads back
+`SSL_CTX_get_verify_mode`, the host flags and the trust store's object count.
+
+**The duals, which are the discipline this battery exists under.** Every "verification is
+configured" assertion would also pass against code that verified *everything*, including the
+`+ssc` case where the user opted out, so each side is pinned against its opposite:
+`Context.FreshContextVerifiesNothing` establishes what an unconfigured context reports;
+`Context.SelfSignedSchemeVerifiesNothing` requires `+ssc` to still report exactly that;
+`Context.VerifiedNameIsTheOneDecided` pairs a certificate carrying the decided name with one
+carrying another; and `Refusal.EmptyHostnameWithVerificationIsRefused` pairs the refusal with
+the same nameless endpoint under `+ssc`, which is accepted. Without its dual each of the four
+is satisfied by code that is wrong in the opposite direction.
+
+**The hostname is read by exercising it, not by reading it.** DEC-025 is right that OpenSSL
+1.1.1t has no `X509_VERIFY_PARAM_get0_host` — confirmed in the engine's own header, which
+declares `set1_host` and `get_hostflags` and no getter for the host. The host flags are a
+witness that the parameters were written on that context, and the battery verifies rather
+than trusts that: the fresh-context test proves `X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS` is
+not the default. But a witness is not the name. So the test builds a 2048-bit key and two
+self-signed certificates in memory, one naming the decided host and one naming
+`attacker.example.com`, copies the context's verification parameters onto an
+`X509_STORE_CTX` with the certificate trusted and `X509_V_FLAG_PARTIAL_CHAIN` set so that
+nothing but the name can fail, and verifies each. The matching name gives `X509_V_OK` and
+the other `X509_V_ERR_HOSTNAME_MISMATCH` — and on an unconfigured context both give
+`X509_V_OK`, which is what makes the pair evidence. That closes the gap DEC-025 recorded as
+unclosable: the name cannot be printed, but it can be asked.
+
+**What fails against the pre-fix code.** `Context.VerifyingSchemeConfiguresTheContext`, on
+all three of its context assertions. At `HEAD` the TLS branch runs `SSL_CTX_new` straight
+into `BIO_new_ssl_connect` with no verify mode, no trust store and no verification
+parameter — the finding's own reproduction, `git grep` over the two source trees for
+`SSL_CTX_set_verify|load_verify_locations|default_verify_paths|SSL_set1_host|X509_VERIFY_PARAM|SSL_get_verify_result`,
+still returns nothing at `HEAD` and five call sites in the tree. So an `SSL_CTX` the pre-fix
+component hands to the BIO is indistinguishable from one nobody touched, which is exactly
+what `Context.FreshContextVerifiesNothing` asserts and passes on today: the difference
+between those two tests is the whole content of the fix. Two others fail there as well —
+`Context.VerifiedNameIsTheOneDecided`, because with no host set the attacker's certificate
+raises no name objection, and `Refusal.RefusedVerificationNeverSendsLogon`, because the
+refusal it expects does not exist and `HEAD` instead assigns `TcpBio` and goes to the
+network with an empty host.
+
+**What no offline test reaches, stated so it is not mistaken for covered.** The two
+certificate refusals in `TcpConnect` — the aborted handshake naming
+`SSL_get_verify_result`, and the independent post-handshake gate — need a server holding a
+certificate. What is asserted is the structure they share: a refusal from
+`ApplyTlsVerification` returns before a socket exists, leaving `ConnectionState` at `Failed`
+with no transport, so `SendBoltHandshake` and the `LOGON` behind it are unreachable by
+construction. The refusal's message is asserted as one contiguous substring of one log line,
+so a message that drops the migration hint fails the test.
+
+**The threat model.** M-neo4j's spoofing threat becomes mitigated with the four steps and the
+evidence; the routing redirect becomes safe on the plain TCP transport, because the scheme
+comes from the endpoint and the verified name from the host being connected to, in one field
+that cannot drift; TB-4 and the Neo4j actor are corrected; the WebSocket gap is a threat of
+its own (F-055); M-tests gains what F-020's battery adds to that module's own surface, which
+is OpenSSL and an in-memory key pair; and the end-of-life OpenSSL ruling is rewritten, because
+it leaned on F-020 being open and now has to stand on what it always actually rested on — the
+version is Epic's, the bytes are the engine's, and the only fix a finding would license is a
+second divergent OpenSSL in the process.
+
+## J-0194 | 2026-11-15 | NOTE | lead
+- Finding: F-047, F-055
+- Corrects: J-0167
+- Module: M-neo4j
+- Changes: none
+
+F-047's first half is wrong and I am the one who got it wrong. The WebSocket scheme-rewriting branch is NOT unreachable, and F-055 (J-0192) is the proof.
+
+What J-0167 claimed, from the planner's CR-010 investigation and with my own confirmation attached: the branch is unreachable 'because of what its caller passes', since InitiateConnection is called only with a hostname. I checked both call sites and saw Hostname and BackendHost, and stopped there. What I did not ask was where BackendHost comes from. It comes from the server: ReconnectToBackendAddress takes a routing record, splits it on the LAST colon only to recover a port, and passes the remainder as the host - so 'wss+insecure://evil:7687' yields BackendHost = 'wss+insecure://evil' with the scheme intact. Verified in the source at :1351-1368. Checking an argument's spelling is not checking its provenance.
+
+The chain is confirmed end to end, including in the engine. The WS branch takes the raw Hostname, matches none of its eight schemes, and 'wss+insecure://...' does not start with 'ws://' so the later upgrade leaves it alone - it reaches the engine verbatim, while ActiveSecurity is consulted only in the else. And UE_5.8's LwsWebSocket.cpp:747-749 accepts 'wss+insecure' and sets LCCSCF_USE_SSL | LCCSCF_ALLOW_SELFSIGNED; :759 names the three protocols it takes as ws, wss and wss+insecure. So a server reached over a verified neo4j+s:// WebSocket connection can redirect the client to an unverified connection anywhere and receive its LOGON.
+
+Two consequences that change how the code should be treated.
+
+The branch must not be removed as dead code. Deleting it does happen to fix F-055's second half - 'wss+insecure://evil' would fall to the else and become the unconnectable 'wss://wss+insecure://evil' - so F-047 and F-055 converge on the same deletion. But the reason is now security rather than tidiness, and the reason is what decides admission: under CR-004 a security finding at major is admissible on the 5.8 line whatever its surface, where F-047 as a minor quality finding was not. Anyone who deletes that block as cleanup will have closed a vulnerability without knowing it, and will not state it in the contract.
+
+F-047's second half still stands: the ws-to-wss upgrade is unreachable for the independent reason that the else has already written wss:// when bEncrypt is true. That half is genuinely dead and genuinely only tidiness.
+
+## J-0195 | 2026-11-15 | CR-011 | planner
+- Event: proposed
+- Type: contract
+- Class: minor
+- Impact: C-neo4j goes from Version 2 to Version 2.1 for US-030. Nothing breaks and no interface moves: the unbounded-reader clause is replaced by the four refusals, the message cap and its residual are stated, and two numbers are stated as a server author must read them. Consumers: M-demo and M-tests, so core-dev and test-dev re-read. Modules: none change. Stories: US-030 is the source and is not edited by this CR; US-032 is named in the contract as the case that still follows UseSSL. Findings: F-021 is the defect the clause described and F-048 its residual, both stated rather than closed here. Tests: BoltPackStreamBoundsTests.cpp joins the Tests line. Tasks in flight: none against M-neo4j.
+- Options: (A) Rewrite the clause to the four refusals, state both limits in the form a server author reads, and state F-048 beside the cap; point release. (B) State the limits as the constants read (64 containers, 16 MiB), which is what the code and the log say and is wrong by one in the direction a server author would build to, and wrong by one transport read on the cap. (C) State the refusals and leave F-048 to its own story, which gives a consumer a mitigation with no residual and the belief that a refused message costs one message. (D) Do not change. Cost: the contract keeps telling consumers to treat the reader as trusting its input entirely, which is now false and costs them a guarantee they could rely on.
+- Changes: none
+
+C-neo4j describes an unbounded reader because that is what the code was. US-030 landed the
+bounds checks, so the sentence the contract was told to rewrite when they landed is now
+false in the safe direction: it warns a consumer about a danger that no longer exists and
+tells them to treat the reader as trusting its input entirely, which is advice that costs
+them a guard they could rely on.
+
+Nothing breaks. A consumer coded against Version 2 wrote their own caution around a reader
+that had none; that caution is now redundant rather than wrong, and every call they make
+returns what it returned before for every message a well-behaved server sends — which is
+what the 36 unchanged codec tests say, since each of them feeds the reader bytes the writer
+produced and none is near a limit. So this is a point release: guarantees are added and none
+is withdrawn.
+
+Two numbers come with it, and both are easy to state wrongly in the direction a server
+author would build to.
+
+**The nesting limit is not 64 containers.** `MaxBoltNestingDepth = 64` is tested as
+`Depth >= 64` against a zero-based depth, so the 64th container is entered and the value
+inside it is refused. The constant and the refusal message both say 64 and agree with each
+other, so this is wording and not a defect — but a contract that said "64 containers" would
+be wrong by one, and wrong in the direction that matters. The number stated is therefore
+what a message may contain: a value nested inside at most 63 containers. That form is exact
+rather than merely cautious, because it also covers the case 64 would get wrong in the other
+direction — an empty container at the limit is itself a value nested inside 63 and decodes.
+Both sides are pinned, by `Bolt.Reader.NestingPastDepthLimit` and
+`Bolt.Reader.NestingAtDepthLimitDecodes` (J-0176, DEC-020).
+
+**The message cap is 16 MiB plus at most one transport delivery.** DEC-021 is explicit that
+the counter is zeroed when a message completes, and the read that completed it may already
+carry the first bytes of the next message, which the dechunker holds while the counter reads
+zero. The round number is therefore not the guarantee. The slack is one receive buffer on
+the plain TCP transport, 16384 bytes against a 16 MiB cap (`Neo4jComponent.cpp:632`), and on
+WebSocket it is whatever the engine's client hands over in one binary-message callback,
+which the plugin does not choose. An exact bound would need `FBoltDechunker` to report its
+partial size, and F-012 makes that class unlinkable from a test, which is also why the cap
+lives on the component's side of it.
+
+F-048 goes in with the cap rather than being left for its own story to mention. The cap's
+refusal resets the dechunker mid-stream, so the framing cannot be resynchronised and the
+component reports itself connected while decoding nothing. A consumer who reads only the cap
+will believe a refused message costs them one message; it costs them the connection, in a
+way that looks like a hang. A contract that states a mitigation and not its residual is the
+shape of document CR-006 was raised to correct.
+
+## J-0196 | 2026-11-15 | CR-012 | planner
+- Event: proposed
+- Type: contract
+- Class: major
+- Impact: C-neo4j goes from Version 2.1 to Version 3 for US-031 — an integer, because a consumer breaks: a self-signed certificate on bolt+s:// or neo4j+s:// connected under Version 2 and is refused now. No signature moves and no Blueprint asset is invalidated; the break is behavioural. Consumers: M-demo and M-tests, so core-dev and test-dev re-read. Modules: none change. Stories: US-031 is the source and is not edited by this CR; US-032 is named as the case that still follows UseSSL. Findings: F-020 is the defect the new clauses answer and F-055 is why the guarantee is scoped to the plain TCP transport rather than stated flatly; F-011 keeps its clause because the property is still in the header. Tests: Neo4jTlsVerificationTests.cpp joins the Tests line. Tasks in flight: none against M-neo4j.
+- Options: (A) State the guarantee scoped to the transport that makes it: plain TCP verifies and checks, WebSocket is stricter about +ssc and advisory about verification, with F-055's two routes named. (B) State one unqualified sentence that an encrypted connection is an authenticated one, which the plain TCP evidence supports and the WebSocket path does not, leaving a reader on the wrong transport believing a guarantee they do not have. (C) State the guarantee and mention F-055 only as an open finding elsewhere, which puts the exception in a document consumers do not read. (D) Do not change. Cost: +s keeps meaning what F-020 made it mean in the contract, the user's condition on J-0163 goes unmet, and the one-character migration exists only in a log line a user sees after their database stops working.
+- Changes: none
+
+A consumer breaks, so the version takes an integer. A user pointed at a server with a
+self-signed certificate on `bolt+s://` or `neo4j+s://` connected under Version 2 and is
+refused under Version 3. The user confirmed that trade at S-02 planning (J-0163) over the
+alternative of warning on 5.8 and enforcing on 5.9, on one condition: that the migration —
+one character, `bolt+ssc://` — appear in C-neo4j as well as in the failure message. It is in
+the message, asserted as one contiguous substring of one log line by
+`Neo4jTls.Refusal.RefusedVerificationNeverSendsLogon`; this CR is the other half of the
+condition.
+
+What the contract now states as the meaning of `+s`: `SSL_VERIFY_PEER`, a trust store whose
+load return is tested, the endpoint's hostname on the X509 verification parameters, and
+`SSL_get_verify_result` inspected after the handshake rather than a completed handshake read
+as a verified one (DEC-023, DEC-024, DEC-025). Which of the four TLS schemes verify, and
+that `+ssc` is the documented opt-out rather than an accident, is now stated per scheme:
+today all four behave alike, and that is exactly what changes.
+
+**The guarantee is not transport-uniform, and stating it flatly would be a lie.** US-031's
+WebSocket criterion left two ways to satisfy it — the decision comes from the same function,
+or the difference is stated in C-neo4j as a difference. The security engineer's verdict
+(F-055, J-0192) is that the WebSocket branch takes its decision from the same function and
+then does not apply it, so only the second is available. I verified the chain myself
+(J-0194): `ReconnectToBackendAddress` splits a server-supplied routing record on its last
+colon only, so a scheme survives into `InitiateConnection`; the WebSocket branch builds its
+URL from the raw hostname, matches none of its eight schemes, and passes `wss+insecure://`
+through verbatim, while `ActiveSecurity` is consulted only in the `else`; and UE 5.8's
+`LwsWebSocket.cpp:747-749` accepts `wss+insecure` and sets
+`LCCSCF_USE_SSL | LCCSCF_ALLOW_SELFSIGNED`. So a server reached over a verified
+`neo4j+s://` WebSocket connection can redirect the client to an unverified connection
+anywhere and receive its `LOGON`.
+
+So the statement had to cover three things and not one. The plain TCP transport makes the
+guarantee and is the only transport that honours `+ssc`. The WebSocket transport is stricter
+in one respect — `+ssc` cannot be honoured at all, because the engine's client verifies the
+chain itself with no way to relax it — and advisory in two others: two engine-level inputs
+the plugin cannot observe can disable authentication process-wide
+(`[LwsWebSocket] bDisableCertValidation` and `-lws-insecure=true`), and a routing redirect
+can reach an unverified host. A reader choosing a transport has to be able to tell which
+promise they get, so the contract scopes the guarantee to the transport that makes it and
+says what the other one does instead.
+
+What this CR deliberately does not do: remove `UseSSL`. US-032 is `ready` and not done, so
+the property is still in the header and `BeginPlay` still overwrites it. A contract that
+removed it now would describe a tree that does not exist, and the silent-downgrade sentence
+goes when the property does. The security engineer made the same call for the threat model.
+
+## J-0197 | 2026-11-15 | CR-011 | planner
+- Event: approved
+- Decision: Approved by the planner as a minor contract change, Version 2.1. Option (A). Nothing in the interface moves and no consumer that compiled against Version 2 stops compiling or stops behaving as it did: the four refusals and the cap are guarantees added, not withdrawn, which is what a point release is for. There is no decision here for the user to take — the alternative to rewriting the unbounded-reader clause is a contract that warns about a danger the code no longer has and advises a caution that now costs the consumer a guarantee. Options (B) and (C) were both refused for the same reason, that each states a number or a mitigation in the form that is easiest to read wrongly: 64 containers is wrong by one and the round 16 MiB is wrong by one transport read, and a cap with no residual invites a consumer to believe a refused message costs them one message rather than the connection.
+- Changes: none
+
+## J-0198 | 2026-11-15 | CR-011 | planner
+- Event: implemented
+- Evidence: C-neo4j Version 2.1. The unbounded-ReadValue clause is replaced by four refusals, each yielding a null value, leaving HasMore() false and logging once per message: a read at or past Data.Num() including ReadByte on an empty buffer and each multi-byte reader truncated mid-value; a declared length or count larger than the bytes remaining, refused before anything is reserved because every element costs at least one byte; a negative length or count; and a value nested inside more than 63 containers. A refusal propagates outwards so no partially decoded value is returned. The nesting limit is stated as what a message may contain and not as what the counter reaches: a value nested inside at most 63 containers decodes, the constant and the log both say 64 because the counter is zero-based, and 63 is the number to build to, pinned from both sides by Bolt.Reader.NestingPastDepthLimit and Bolt.Reader.NestingAtDepthLimitDecodes. The cap is stated as 16 MiB plus at most one transport delivery and not as the round number, with the slack named per transport: one 16384-byte receive buffer on plain TCP, and on WebSocket whatever the engine hands over in one binary-message callback. F-048 is stated beside the cap as the residual that it is. BoltPackStreamBoundsTests.cpp joins the Tests line and the Specification records that the cap lives on the component's side of FBoltDechunker because F-012 makes the class unlinkable from a test. Verified in the source: BoltPackStream.cpp:178, :184, :192, :250-294; Neo4jComponent.h:222; Neo4jComponent.cpp:632, :781-801, :844.
+- Changes: contracts/C-neo4j.md
+
+Every claim was verified in the source for this CR rather than taken from the task brief or
+the findings, because a contract corrected from a second-hand description is where the next
+wrong version comes from.
+
+`BoltPackStream.cpp:178` declares the constant and `:294` tests `Depth >= MaxBoltNestingDepth`
+against the `Depth` that `ReadValue()` seeds at 0, so containers are entered at depths 0
+through 63 and the value inside the 64th is refused. The form the contract states — a value
+nested inside at most 63 containers decodes, one nested deeper is refused — is exact in both
+directions, which "63 nested containers" alone would not be: an *empty* container at the
+limit is itself a value nested inside 63 and decodes, and the test pins exactly that shape
+(`StatedNestingDepth - 1` lists with an int at the bottom, and no expected error declared at
+all).
+
+`Require(N)` at `:192` refuses `N < 0` and `N > Data.Num() - Cursor` in one comparison, which
+is what makes the four refusals one gate rather than four; `Refuse()` at `:184` sets `Cursor`
+to `Data.Num()` so `HasMore()` reports exhausted, and short-circuits so only the first
+refusal logs. `ReadList`, `ReadMap` and `ReadStructure` call `Require` on the declared count
+before `Reserve`, and `ReadStructure` requires `NumFields + 1` for the tag byte.
+
+The cap is at `Neo4jComponent.h:222` and enforced at `Neo4jComponent.cpp:781`, before
+`Accumulate`, in `int64` so a hostile `Size` cannot overflow the comparison; `:799` zeroes
+the counter inside the `PopMessage` loop, which is the slack the contract states, and
+`:632`'s `uint8 Buffer[16384]` is its size on the TCP path. The WebSocket path reaches the
+same function through `OnWebSocketBinaryMessage` at `:844`, where the delivered size is the
+engine's choice, so the slack is stated per transport rather than as one number.
+
+## J-0199 | 2026-11-15 | CR-012 | planner
+- Event: approved
+- Decision: Approved on the user's decision at S-02 planning (J-0163), which is where the authority for this one sits: a consumer's working connection stops working, so it was never the planner's to take. Version 3, an integer, because from a consumer's point of view a connection that was made is now refused — the usual test for an integer is that a guarantee is withdrawn, and here it is the laxity that is withdrawn, which breaks them just the same. Option (A). The user's condition was that the one-character migration appear in the contract as well as in the failure message, and it does, in the Errors clause beside the refusal that states it. Option (B) is the one actually on offer and is refused: one unqualified sentence is what the plain TCP evidence supports and the WebSocket path does not, and F-055 is the proof that writing it would be a lie by omission rather than a simplification. Option (C) is refused because a consumer reads the contract and not the threat model, so an exception recorded only there is an exception nobody meets until it costs them a password.
+- Changes: none
+
+## J-0200 | 2026-11-15 | CR-012 | planner
+- Event: implemented
+- Evidence: C-neo4j Version 3. The scheme invariant now states the decision as data and per scheme: bolt+s, neo4j+s, https and wss encrypt and verify chain and hostname; bolt+ssc and neo4j+ssc encrypt and verify neither, as the documented opt-out; bolt, http and ws do not encrypt; neo4j and an unrecognised scheme follow UseSSL and are fully verified when encrypted, the case US-032 removes — pinned for all ten schemes on both framings and both values of UseSSL by Neo4jTls.Decision.SchemeMatrix. The verified name is the host being connected to, in the same field used for BIO_set_conn_hostname and SNI, so the host reached and the name checked cannot drift. A new Errors clause states that a TLS connection that cannot be verified is refused before any credential is sent, with the four refusals, what each message names, and the one-character migration to bolt+ssc:// or neo4j+ssc:// that the user made the condition of this change (J-0163). A new subsection states the guarantee scoped to the transport that makes it: on plain TCP the four steps of DEC-023, DEC-024 and DEC-025 with the trust store named and +ssc honoured; on WebSocket the decision is advisory in both directions, stricter because +ssc cannot be honoured at all and weaker because bDisableCertValidation, -lws-insecure=true and a scheme-bearing routing record can each remove authentication without the plugin being able to observe it (F-055). The routing invariant is scoped the same way. UseSSL keeps its clause and F-011 its sentence, because US-032 is ready and not done. Neo4jTlsVerificationTests.cpp joins the Tests line, and the seam is described as adding no exported symbol and no Blueprint-facing declaration. Verified in the source: Neo4jComponent.cpp:60, :126-180, :181-238, :283, :290-345, :530-600; LwsWebSocket.cpp:747-749 in the engine for the wss+insecure flags.
+- Changes: contracts/C-neo4j.md
+
+The whole transport-scoping statement was verified in the source for this CR, both halves of
+it, because this is the clause a reader will act on when choosing a transport.
+
+The plain TCP half, at `Neo4jComponent.cpp:181-238` and `:530-600`: `ApplyTlsVerification`
+runs on the `SSL_CTX` before `BIO_new_ssl_connect`, refuses when the trust store is absent
+or `SSL_CTX_load_verify_locations` does not return 1, refuses a verifying decision with an
+empty hostname, sets `SSL_VERIFY_PEER`, and writes `X509_VERIFY_PARAM_set1_host` with
+`X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS`. `ResolveTrustStorePath` at `:60` tries the project's
+`Content/Certificates/cacert.pem` and then the engine's
+`Content/Certificates/ThirdParty/cacert.pem`, in that order. `SSL_get_verify_result` is read
+on the aborted handshake and again after a successful one, and each refusal sets
+`ConnectionState` to `Failed` and returns before `SendBoltHandshake`, so the `LOGON` is
+unreachable by construction. Both refusal messages name `bolt+ssc://` and `neo4j+ssc://`.
+
+The WebSocket half, at `:290-345`: `DecideTransportSecurity` is called once for both framings
+at `:283` and only `TcpConnect` is handed it. The branch builds `WsUrl` from the raw
+`Hostname` argument; the eight `StartsWith` rewrites are `neo4j+s`, `neo4j+ssc`, `neo4j`,
+`bolt+s`, `bolt+ssc`, `bolt`, `http` and `https`, so `wss+insecure://host` matches none, and
+the following upgrade tests `StartsWith("ws://")`, which it does not satisfy either — it
+reaches `CreateWebSocket` verbatim. `ActiveSecurity` is consulted only in the `else`, for a
+bare hostname. The `+ssc` warning is at `:337`.
+
+One wording choice worth recording. The WebSocket transport is described as *advisory in
+both directions* rather than simply weaker, because it is genuinely stricter about `+ssc`:
+the engine's client verifies the chain itself and offers no way to relax it, so a user who
+asked for a self-signed certificate does not get one. A reader who takes "the decision is
+not applied" to mean "nothing is checked" would conclude that `+ssc` works there, which is
+the opposite of true, and would read a connection failure as the plugin's bug.
+
+One observation, not a defect and not opened as a finding: the cap refusal's log prints
+`UnresolvedMessageBytes`, the count *before* the rejected read, so the number it reports is
+up to one transport delivery short of the bytes it is discarding. It is accurate as the size
+of the partial message held and is within the slack the contract now states.
+
+## J-0201 | 2026-11-15 | NOTE | planner
+- For: CR-011, CR-012
+- Contract: C-neo4j
+- Changes: contracts/C-neo4j.md
+
+Three sentences in the rewritten C-neo4j narrated the change instead of stating the state, and the checker caught one of them (P-18): the coverage invariant opened 'the connection is no longer untested', the ReadValue clause ended 'which is the reverse of Version 2', and the migration clause said a self-signed certificate 'connected before and does not now'. All three are rewritten in the present tense, and the version delta that a consumer actually needs is kept where it belongs - 'Version 3 refuses one connection that Version 2 makes', which is a statement about two versions rather than about the project's past. Worth recording because the pull is specific to a contract rewrite: the interesting thing while writing it is what moved, and the reader's question is what holds.
+
+## J-0202 | 2026-11-15 | NOTE | lead
+- Reference: CR-011, CR-012
+- For: core-dev, test-dev
+- Changes: none
+
+C-neo4j's consumer notification is owed and undelivered. The planner tried to send it from T-32 and SendMessage refused - no coder was live - so M-demo's owner (core-dev) and M-tests' owner (test-dev) have not been told. Recorded here so it is not lost between spawns; the lead relays it at the next spawn of either, and at the sprint review.
+
+What they need to know: C-neo4j is at Version 3 (CR-011 took it to 2.1, CR-012 to 3). What is new rather than reworded is the per-transport guarantee subsection at the end of Invariants, the four reader refusals and the message cap in Errors with F-048 stated beside the cap as its residual, and the TLS refusal clause with the bolt+ssc:// migration. UseSSL and F-011 keep their clauses, because US-032 is ready and not done. The reasoning and the verified source lines are in 'ateam_log.py show CR-011' and 'show CR-012'.
+
+The one clause that changes what a consumer may assume: Version 3 refuses one connection Version 2 made - a self-signed certificate on bolt+s:// - and the migration is bolt+ssc://. Any demo or test fixture pointing at a self-signed server over bolt+s:// needs that one character.
+
+## J-0203 | 2026-11-15 | F-056 | tester
+- Event: opened
+- Story: US-030
+- Module: M-neo4j
+- Kind: performance
+- Severity: major
+- Repro: FANTASIA/Source/FANTASIATests/Private/Stress/BoltStressTests.cpp, test FANTASIA.Stress.Bolt.Reader.DecodeAmplification (default run: 1 Mi elements; add -StressFullAmplification for the full 16 MiB message)
+- Changes: none
+
+The 16 MiB message cap bounds bytes on the wire, not what they decode into. A well-formed RECORD-shaped message holding a List32 of N one-byte integers is N+5 bytes and decodes into N heap-allocated FBoltValue objects: sizeof(FBoltValue) is 176 bytes, MakeShared makes it a 192-byte block, and the list holds a 16-byte shared pointer to it, so one wire byte costs about 208 bytes of heap. Measured at the cap (16777211 elements, 16777216 wire bytes, passes OnDataReceived and the reader's bounds because every count is satisfied by the bytes that follow): 3141 MiB resident (196 bytes per wire byte) and 1066 ms to decode; the 1 Mi element run measured 120 MiB and 46 ms, and the scaled figure underestimates the full one, so allocation cost is superlinear. OnDataReceived runs on the game thread (TcpRecvLoop hands every read to it by AsyncTask), so a server that sends one such message freezes the game for about a second and takes about 3 GiB of memory, repeatably, once per message. F-021 asked that a hostile or faulty server not be able to exhaust memory; the cap removes the unbounded growth and leaves this factor of about 200. It is not a regression (the old reader decoded the same message, with no cap), and no reader bound fixes it by itself: a bound on elements decoded per message, or a cheaper representation for a run of scalars, would. Not logged as Kind=security, deliberately: under CR-004 the label licenses the fix onto the 5.8 line, and that is the security engineer's ruling to make, not mine. The legitimate case it also touches: a collect() of a large result is one such list.
+
+## J-0204 | 2026-11-15 | F-057 | tester
+- Event: opened
+- Story: US-030
+- Module: M-neo4j
+- Kind: bug
+- Severity: minor
+- Repro: FANTASIA/Source/FANTASIATests/Private/Quality/Neo4jReceivePathQualityTests.cpp, test FANTASIA.Quality.Neo4j.Cap.UnderCapMessageRefusedWhenReadStraddles
+- Changes: none
+
+The message cap is charged to bytes handed to the dechunker, and the check runs on the whole transport read, so a read that completes a message and also carries the first bytes of the next is charged to the first. A message of 16 MiB minus 5 bytes (under the cap) is delivered when the transport cuts the stream at multiples of 16384 from its start, and is refused (and then F-048's desynchronisation follows) when the very same bytes arrive with the first read one byte long. So the effective limit on one message is the cap minus up to one transport read, depending on where TCP happened to cut, 16 KiB below the 16 MiB the contract states. C-neo4j documents the guarantee as the cap plus at most one delivery, which is the permissive side only. Narrow: it takes a legitimate message within 16 KiB of 16 MiB. Minor, and worth saying only because the consequence of any refusal is F-048.
+
+## J-0205 | 2026-11-15 | F-058 | tester
+- Event: opened
+- Story: US-031
+- Module: M-neo4j
+- Kind: bug
+- Severity: minor
+- Repro: FANTASIA/Source/FANTASIATests/Private/Quality/Neo4jTransportQualityTests.cpp, test FANTASIA.Quality.Neo4j.Hostname.EdgesOfTheName
+- Changes: none
+
+UNeo4jComponent::ExtractHostname cuts at the first colon, which for a bracketed IPv6 literal is inside the brackets: ExtractHostname('bolt+s://[::1]:7687') is '[', and '[2001:db8::1]' is '[2001'. That string is both the host the socket is asked to reach and, under US-031, the name the certificate is checked against (FNeo4jTlsDecision.Hostname), so an IPv6 literal endpoint cannot connect on any scheme. It fails closed: nothing named '[' answers and no certificate carries it, so no credential goes anywhere, which is why this is minor and not a security finding. Pre-existing and not introduced by US-031, but US-031 made the function's answer load-bearing for verification, and the security matrix pins only well-formed names. A userinfo prefix (bolt+s://someone@host) likewise stays in the host.
+
+## J-0206 | 2026-11-15 | F-059 | tester
+- Event: opened
+- Story: US-034
+- Module: M-llm
+- Kind: quality
+- Severity: minor
+- Repro: FANTASIA/Source/FANTASIATests/Private/Quality/Neo4jTransportQualityTests.cpp, test FANTASIA.Quality.Tooltip.ConfigAndPreset
+- Changes: none
+
+US-034's first criterion is about the reflected metadata of UOpenAICompatibleComponent::Config: it must name Apply Provider Preset as a call that replaces the whole configuration including the key, and say the key must be set again after it. The sentence was written on the ApplyPreset function instead (OpenAICompatibleComponent.h:128-141) and the coders' test FANTASIA.Secrets.Tooltip.ApplyPreset reads it there. Config's own tooltip, the one a researcher reads in the Details panel when deciding where the key goes, still says only that the key belongs in DefaultGame.ini and names neither the node nor the erasure. The Blueprint node's hover text is a defensible place for the warning, arguably the better one, since it is where the act happens; but the criterion as written asks for Config, so either the criterion or the placement should move. A hypothesis about the reader's intent, not a measured usability result. Separately the coders' assertion is weak: it checks for the words Apply Provider Preset and APIKey, and APIKey would stay in the tooltip if the set-again obligation were removed; the tester's test additionally pins wholesale, again and Custom.
+
+## J-0207 | 2026-11-15 | NOTE | lead
+- Finding: F-048
+- Corrects: J-0172, J-0175
+- Reference: DEC-021
+- Changes: none
+
+The 'tester's stress plan' cited as a reason to leave F-048 open does not exist, and I propagated the error twice. Established by the tester at my request, and verified by me.
+
+What is actually in the repository: docs/ateam/verification/core-dev.md:88, the Stress bullet of the PLANNER's verification profile FOR core-dev, added in the uncommitted S-02 planning edit. It reads '...confirming that the cap is what stops it and not an allocation failure, and that the connection survives the refusal'. There is no tester-authored stress plan anywhere; docs/ateam/verification/ holds coder profiles only and has no tester.md.
+
+So the sentence exists but it is not the tester's, and it does not say what three entries claim. 'Survives' can only mean 'not torn down' - it predates F-048 (J-0172) and says nothing about the connection continuing to decode. DEC-021 says 'the tester's plan asserts the connection survives the refusal'; the security engineer's ruling says 'the tester's stress plan explicitly expects not to happen'; and J-0172 and J-0175 are mine, repeating it. core-dev's original phrasing was the loosest reading rather than an invention, and the security engineer and I then hardened it into a constraint nobody had written.
+
+What this does and does not change. F-048 stays open and the ruling stands, on three reasons that survive intact: P-07 keeps a teardown out of a story that asked only for the partial message to be discarded; a teardown lands in the disconnect path beside a live receive thread where a half-done teardown is a use-after-free; and under CR-004 the Kind=security label would license exactly that fix. What is withdrawn is the fourth reason, that a plan expected the connection to keep working. No plan said so.
+
+Two consequences. J-0175's half-fix - stop reporting ready after a refusal, log each later read - contradicts nothing in any plan, so the one objection that might have blocked it is gone. And the tester's new pin, Quality.Neo4j.Cap.RefusalLeavesStreamUnrecovered, measures what the sentence was being used to assume away: one 20 MiB message, then 0 of 3 following replies delivered against 3 of 3 on the control. It also corrected my wording - 'cannot resynchronise' overstates it, since realignment by luck is possible; with this payload it never happens.
+
+## J-0208 | 2026-11-15 | NOTE | lead
+- Finding: F-059
+- Story: US-034
+- For: the S-02 review
+- Changes: none
+
+F-059 is two defects, and the tester understated the second by calling the whole thing a hypothesis about reader intent. The first half is interpretation; the second is a flat conflict between a story's criterion and a project decision, and it is the review's to settle.
+
+US-034's first criterion, read verbatim from backlog.md:514: 'Given UOpenAICompatibleComponent::Config, When its UHT-generated documentation metadata is read through reflection, Then that metadata names Apply Provider Preset as a call that replaces the whole configuration including the key, AND SAYS THE KEY MUST BE SET AGAIN AFTER IT'.
+
+First half, a location mismatch and fixable: the sentence is on ApplyPreset's metadata, not on Config's, and Config's own comment is silent about the preset. Whether 'its metadata' permits the sibling function's is arguable; a reader in the Details panel looking at Config does not see it, which is the reading that matters.
+
+Second half, and this is not arguable: the criterion requires the tooltip to advise setting the key again after the preset. T-29 deliberately refused to write that, and was right - setting the key again in a Blueprint graph makes it a literal in a committed asset, which defeats ADR-0001 exactly as a typed asset value does, and which is the trap F-032 exists to warn about. What it wrote instead is the honest alternative: skip the node and set the endpoint fields in the same DefaultGame.ini entry as the key.
+
+So the criterion asks for the defect its own story was created to remove. This is the second time in two sprints that a criterion written before the work specified the wrong remedy - US-029's asked for an input that cannot exist (CR-009) - and the pattern is worth a retrospective line rather than being treated as two accidents.
+
+US-034 cannot be accepted against this criterion as written. The amendment is a change request and the user's: move the requirement onto Config's own metadata, and replace the set-again clause with the ini route T-29 actually documented. I am not raising it before the reviewer has ruled, because whether the criterion is met is its call and I should not foreclose it.
+
+## J-0209 | 2026-11-15 | F-056 | security
+- Event: opened
+- Corrects: J-0203
+- Story: US-030
+- Module: M-neo4j
+- Kind: security
+- Severity: major
+- Repro: FANTASIA/Source/FANTASIATests/Private/Stress/BoltStressTests.cpp, test FANTASIA.Stress.Bolt.Reader.DecodeAmplification with -StressFullAmplification
+- Changes: none
+
+Ruled `Kind=security`, severity unchanged at major. The tester measured it, declined the
+label, and deferred the call; this is the answer.
+
+**Why security.** It is denial of service across TB-4, driven entirely by bytes from the
+untrusted side of that boundary, and it is the surviving half of the threat F-021 was
+opened for. Nothing in the code budgets what a message decodes into: the 3141 MiB is a
+property of arithmetic on `sizeof(FBoltValue)` and not the outcome of any control, so
+US-030's cap bounds the input and leaves the resource unbounded by anything checked. The
+threat model's M-neo4j entry claimed exhaustion from a server message was mitigated; with
+this measured it is not, and a finding is the only thing that keeps that sentence honest.
+
+**Why the carve-out test passes this time, having failed twice.** I have twice declined
+`Kind=security` because under CR-004 the label licenses the fix onto the shipped 5.8 line
+whatever surface it touches, and the fix available was worse than the defect: a second
+divergent OpenSSL in the process (J-0137), a connection teardown beside a live receive
+thread (J-0173). The fix this label licenses is a running budget on values decoded per
+message inside `FBoltPackStreamReader`, checked in the element loops of `ReadList`,
+`ReadMap` and `ReadStructure` and refusing past it exactly as `Require` and
+`MaxBoltNestingDepth` already do. It adds no exported symbol, no `UPROPERTY`, `UFUNCTION`,
+delegate or enum, and no Blueprint-facing signature, so it clears even CR-001's narrower
+bar; it is the same shape as F-021's own fix, which CR-004 admitted without controversy.
+
+It also cannot cause F-048. By the time the reader runs, `Dechunker->PopMessage` has
+already resolved the message boundary (`Neo4jComponent.cpp:795-801`), so a refusal inside
+the reader costs one message and leaves the framing aligned. A refused read makes
+`ParseBoltServerMessage` take its `Expected structure` branch and return a default
+`FBoltServerMessage` (`BoltProtocol.cpp:334-338`), whose tag 0 matches no case in
+`HandleServerMessage`'s `Streaming` state, so nothing is retained and the connection is
+neither torn down nor desynchronised. The consequence is that one query never completes,
+which is the gap J-0175's half-fix addresses and not a new one. I would be glad to see this
+land, which is the test.
+
+**Why major and not blocker.** My blocker criteria are a way across a trust boundary, an
+exposed secret, or untrusted input reaching code or a privileged tool; this is none of
+them. No memory is read out of bounds, no credential moves, nothing becomes code — F-021
+was a blocker for its items 1 and 2, an out-of-bounds read handed to Blueprint and a stack
+overflow, and this is arithmetic on legitimate allocations. The damage per message is
+bounded and transient: about 3.1 GiB allocated and released and about 1 s of game thread,
+survivable once on the 64 GB this project budgets for, and its leverage comes from
+repetition, which is a flood no client-side bound stops. And US-030 strictly reduced the
+exposure, from unbounded to a bounded factor of about 200; blocking the story that improved
+it would hold F-020's and F-011's fixes behind it and leave the worse state in place
+longer.
+
+**So US-030 can be accepted, on one documentation condition.** Its acceptance criteria are
+all about malformed messages and this message is well formed, so the criteria are met as
+written. What over-claims is prose: the story's own narrative says a server 'cannot read my
+process's memory or stop it', and C-neo4j and the threat model say exhaustion is mitigated.
+Those three sentences have to be scoped to what the cap does before the story is accepted,
+or acceptance records a guarantee the code does not provide. The threat model's half is
+done here.
+
+**One warning on the fix's shape.** The amplification is a property of `FBoltValue`: a
+176-byte variant holding every alternative inline (`FString`, `TArray`, `TMap` and
+`FBoltStructure` all resident at once), individually heap-allocated by `MakeShared` for
+every scalar, so 192 bytes of block plus 16 of shared pointer per one-byte integer — which
+is the tester's measured 196 bytes per wire byte. The structural fix is therefore a
+narrower value representation, and `FBoltValue` carries `FANTASIA_API` and is named in
+C-neo4j, so that fix is a contract version and is **not** admissible under CR-004 without a
+change request. The budget is the admissible fix; nobody should reach for the
+representation inside a security story.
+
+**A note for whoever sizes the budget.** The one real cost of a budget is refusing a
+legitimate result, and `BuildPullAllFramed` sends `PULL n=-1` (`BoltProtocol.cpp:297-301`),
+so the client asks for every row and a large result is many bounded messages rather than one
+big one (DEC-021). A budget per message therefore bites only a single RECORD holding one
+enormous value, which is the hostile shape; the legitimate large-result case is F-060's
+problem, not this one.
+
+## J-0210 | 2026-11-15 | F-060 | security
+- Event: opened
+- Story: US-030
+- Module: M-neo4j
+- Kind: security
+- Severity: major
+- Repro: FANTASIA/Source/FANTASIA/Private/Neo4jComponent.cpp:1038 retains every RECORD's fields in CurrentRecords, emptied only at :1123 (query start) and :1429 (terminating SUCCESS); BoltProtocol.cpp:297-301 sends PULL n=-1. No test yet; the one owed is described in the body.
+- Changes: none
+
+Found while ruling on F-056, and it is the fact that decides F-056's severity, so it is
+recorded apart from it: the amplification F-056 measures is bounded per message only
+because something downstream is assumed to release it, and nothing does.
+
+**The defect.** Decoded RECORD fields are retained across messages with no bound.
+`HandleServerMessage` moves each RECORD's fields into `CurrentRecords`
+(`Neo4jComponent.cpp:1038`), and `CurrentRecords` is emptied in exactly two places:
+`DispatchCommand` at `:1123`, when a query starts, and
+`ConvertBoltRecordsToResponse` at `:1429`, when the terminating SUCCESS arrives. Between
+the two, every RECORD the server sends is accumulated and held. The client asks for all of
+them — `BuildPullAllFramed` sends `PULL n=-1` (`BoltProtocol.cpp:297-301`) — so no
+protocol field bounds the count, and a server that sends RECORDs and never the SUCCESS is
+never made to stop. The 16 MiB cap does not reach this: `UnresolvedMessageBytes` is zeroed
+every time a message completes (`Neo4jComponent.cpp:798`), so each RECORD is independently
+under the cap and the number of them is unbounded.
+
+**Why it matters.** This is the half of F-021's item 4 that US-030 did not close. That item
+was 'a server that never terminates a message grows the buffer until the process dies';
+US-030 capped the dechunker's accumulation, and the identical unbounded accumulation sits
+one layer downstream, in the component, uncapped. The cost per wire byte is F-056's
+amplification: about 208 bytes of heap per `FBoltValue`, so with F-056's shape about 300 MiB
+of upload retains about 60 GiB and kills a 64 GB machine, and even without amplification a
+flood of minimal RECORDs — about 11 wire bytes each, holding one 192-byte `FBoltValue`
+block plus its 16-byte shared pointer — retains about 36 times what it costs to send. Both
+end in process death rather than F-056's survivable spike. The two compose and the pair is
+this project's strongest availability exposure: F-056's fix does not touch this one, because
+the amplification is per value and a bound per message leaves a flood of small messages
+untouched.
+
+**Kind=security, and the carve-out test passes.** The fix the label licenses is a budget on
+what one query may retain — a count of records, or an aggregate of values — in
+`UNeo4jComponent`'s private state, with an action when it is hit. The terminal action
+already exists in-path and needs no new behaviour: the FAILURE branches at `:1021-1029` and
+`:1046-1057` set `ConnectionState = Failed` and send a framed RESET, on the game thread, with
+no teardown and no interaction with the receive thread, and `IncomingResponse` then either
+does not fire or fires with no rows, which is what C-neo4j already says of a FAILURE. So
+unlike F-048 the fix is a reuse of a path that is already there, in the thread that already
+owns that state. Private members only, no exported symbol, no Blueprint-facing signature:
+admissible even under CR-001's narrower bar. I would be glad to see it land.
+
+**Severity major, not blocker, and it does not bar US-030.** F-021's item 4 names
+`FBoltDechunker::ProcessBuffer` specifically, and US-030's criteria ask for the dechunker's
+accumulation to stop at a stated maximum; both are satisfied. This is a defect I found
+beside the story, not a criterion the story fails. As for grade: it is unbounded and ends
+in process death, which argues up, but the precondition is a server the user configured,
+pointed at and holds credentials for, and the outcome is a crash of the user's own editor
+or game with no disclosure and no persistence; on the plain TCP transport an attacker in
+position to inject RECORDs is already inside F-011's blast radius, where the recorded
+outcome is worse. Major, and the next M-neo4j story's work rather than this one's.
+
+**Reproduction owed, and cheap.** No test exists. The one to write drives
+`OnDataReceived` through `FNeo4jTestAccess` with the component in `Streaming` /
+`WaitingPullRecords`, feeds N framed RECORD messages and no terminating SUCCESS, and reads
+`CurrentRecords.Num()` back through the seam — the growth is the assertion, with the dual
+that a terminating SUCCESS leaves it at zero. It needs no device, no network and no
+database, and the existing receive-path quality tests already reach that state. Until it is
+written this finding rests on the five line numbers above, which is the same standing
+F-021 was opened on.
+
+## J-0211 | 2026-11-15 | NOTE | security
+- Finding: F-057, F-058
+- Reference: F-056, F-060, F-048, J-0207
+- Changes: threat-model.md
+
+The threat model now says what the 16 MiB cap does and does not do, and F-057 and F-058 are
+ruled not security — recorded because the lead asked rather than assumed, which is the whole
+value of the question.
+
+**F-057, not security.** Its error is strict and never permissive: charging the cap to the
+whole transport read refuses up to one delivery early and cannot let more than the cap
+through, so provoking it gains an attacker nothing a compliant message does not already get.
+It fails closed. Its only security-adjacent consequence is that it widens F-048's trigger,
+and that is assessed where it belongs, under F-048's flip conditions: F-057 does make a cap
+refusal reachable by a message under the cap, which is the first condition's subject, but
+the band is one Bolt message within 16 KiB of 16 MiB and it takes a result already sitting
+at the edge of what the cap permits, so the desync is not reachable in ordinary operation and
+the balance that decided the ruling does not move. A lowered cap, or a result shape that
+routinely approaches it, would move it. One correction to the finding's wording: C-neo4j is
+incomplete rather than wrong — it states the slack on the permissive side only, and the
+strict side needs the same sentence. That is core-dev's text to add.
+
+**F-058, not security**, and the reason is worth keeping because it is the general rule for
+this class. A hostname parse bug becomes a security defect exactly when the connect target
+and the verified name can diverge; here they cannot, and I checked rather than assumed.
+`ExtractHostname` produces one value, `InitiateConnection` takes it as the host to reach and
+passes that same argument into `DecideTransportSecurity` as the name to verify
+(`Neo4jComponent.cpp:266`, `:285`), which is the stated mitigation for the routing redirect.
+`[` resolves to nothing and no certificate carries it; a userinfo prefix left in the host
+behaves the same way; an endpoint that parses to no host is already refused, with a dual
+test on it. So the defect fails closed on both uses at once. The risk to watch is not this
+defect but any later change that hands the socket a differently parsed host from the one
+verified.
+
+**What changed in the threat model.** M-neo4j's *Deserialises* bullet now says the three
+bounds hold over wire bytes and that neither decoded size nor retention is bounded. The
+single threat *Memory corruption and exhaustion from a server message* is split: memory
+corruption stays mitigated with its 18 tests, and a new *Memory exhaustion from a server
+message* carries F-056's measurement, F-060's retention, why they compose and why the
+narrower `FBoltValue` is a contract version rather than a security fix. Open risks gain
+F-056 and F-060 as the residue of F-021, and F-048's entry gains the tester's pin
+`Quality.Neo4j.Cap.RefusalLeavesStreamUnrecovered`, the withdrawal of its fourth reason
+(J-0207) stated as a withdrawal so nobody cites it again, and the F-057 assessment above.
+The coverage list notes that F-056's test is the tester's rather than mine, that nothing is
+owed under `Private/Security/` for it until there is a budget to pin, and that F-060's test
+is the next case to write after F-022's and F-023's.
+
+## J-0212 | 2026-11-15 | NOTE | reviewer
+- Event: verdict
+- Story: US-030
+- Verdict: meets request
+- Open findings: F-048, F-056, F-057, F-060 (all major or minor, none blocking); F-021's threat half open
+- Evidence: gate report e093da91568a/index.json 198 tests 0 failures 11.149 s (read, not re-run); 18 tests FANTASIA.Security.Bolt.*; BoltPackStream.cpp:164-360; Neo4jComponent.cpp:772-802
+- Changes: none
+
+**Verdict: meets request.** Every one of US-030's six criteria is met by a test that exists,
+and the two open majors ruled `Kind=security` today (F-056, F-060) do not bar it.
+
+**Evidence.** The gate was not re-run, by the lead's instruction; the measurement behind this
+verdict is the exported report of the 19:03:33 run, read directly:
+`%LOCALAPPDATA%\FANTASIA-Gate\FantasiaGate\Saved\GateReport\e093da91568a\index.json` —
+198 tests, 196 succeeded, 2 succeeded with warnings, 0 failed, 0 not run, 11.149 s. The two
+warning-bearing tests are S-01's `Quality.Secrets.Leak.*`, which each wait 2.05 s on a refused
+connect to 127.0.0.1:1 and are 4.2 s of the run's 11.1 s; no S-02 test warns. 18 tests under
+`FANTASIA.Security.Bolt.*`, and `BoltPackStreamTests.cpp` is untouched in the working tree, so
+the 36 codec tests pass unchanged rather than adjusted.
+
+**The criteria, and the one substitution.** The four refusal paths are asserted at the reader
+(`EmptyBuffer`, the four truncations, the five length/count cases, `NegativeThirtyTwoBitCount`,
+`NestingPastDepthLimit`) and the cap at the component (`MessageCap.CapIsExact` accumulates
+exactly 16 MiB and refuses one byte more, through `FNeo4jTestAccess::FeedTransportBytes`, with
+no exported symbol added — DEC-021's placement holds and no CR was owed). Both sides of each
+boundary are pinned, so none of it would pass against a reader that refused everything
+(`ExactFitDecodes` against `OneByteShortIsRefused`, `NestingAtDepthLimitDecodes` against its
+dual). One criterion is met by a stated substitute rather than directly: "`IncomingResponse`
+either does not fire or fires with no rows" is unobservable from a module that declares no
+`UCLASS`, and `CheckNoResponseAccumulated` asserts the same claim through four pieces of
+component state that `HandleServerMessage` would have moved. The substitution is written in the
+test file's header, which is the right place for it.
+
+**The mechanism the story left to the diff, verified.** `Require(N)` precedes every read,
+`Reserve` and `Append` on all four paths, refuses a negative N, and short-circuits on
+`bRefused`, so the refusal logs once; `ReadValue(Depth)` funnels every refusal to a null value
+so no partially decoded value is returned; `Depth` is a parameter, so no return path can forget
+to undo it. `Stress.Bolt.Cap.RepeatedRefusals` measured six refusal cycles at a 16.0 MiB peak
+each, returning to 0.0 MiB above baseline, with no growth across the six: the cap's memory
+claim is measured, not asserted.
+
+**The ruling the lead asked for: a narrative that promises more than its criteria deliver.** The
+story is accepted against its criteria, which are the testable form of the request, and all of
+them are about malformed messages; F-056 and F-060 are driven by well-formed ones, so neither is
+a criterion this story fails. Refusing the story would send core-dev work its criteria never
+asked for and that P-07 forbade it from taking — a budget on values decoded per message is a
+different fix, with its own DEC and its own carve-out ruling, which the security engineer only
+made today. But acceptance must not launder the "or stop it" half of the narrative, which is not
+delivered: F-060 lets a server end the process. So the verdict stands and three things are owed
+beside it, none of them code: the story's narrative clause amended or F-056 and F-060 carried on
+a `Known defect:` line; C-neo4j naming F-056, F-057 and F-060 where it states the cap's
+guarantee, as it already names F-011, F-012, F-048 and F-055; and F-021 closed with its residue
+named in the closing entry rather than silently. A documentation fix is an acceptable answer to
+an over-claiming narrative only when it is made everywhere the claim appears, and the threat
+model — the one place already corrected — is the document fewest consumers read.
+
+## J-0213 | 2026-11-15 | NOTE | reviewer
+- Event: verdict
+- Story: US-031
+- Verdict: meets request
+- Open findings: F-055 (major) and F-058 (minor) compatible; one new major reported to the lead: the unqualified guarantee in Neo4jComponent.h:118-122
+- Evidence: gate report e093da91568a/index.json 198 tests 0 failures (read, not re-run); 11 tests FANTASIA.Security.Neo4jTls.*; Neo4jComponent.cpp:140-240, :487-500, :560-621; C-neo4j Version 3 per-transport subsection
+- Changes: none
+
+**Verdict: meets request.** All eight criteria met, including the WebSocket criterion, and one
+major finding in the diff that is a documentation defect rather than a criterion failure.
+
+**Evidence.** The 19:03:33 gate report read rather than re-run
+(`%LOCALAPPDATA%\FANTASIA-Gate\FantasiaGate\Saved\GateReport\e093da91568a\index.json`, 198/0);
+11 tests under `FANTASIA.Security.Neo4jTls.*`; and the source read at
+`Neo4jComponent.cpp:140-179` (the decision), `:181-240` (the application), `:487-500` (applied
+before `BIO_new_ssl_connect`), `:560-610` (both `SSL_get_verify_result` gates) and `:619-621`
+(`SendBoltHandshake`, which every refusal returns before).
+
+**The four applied steps, each present and each checked.** `SSL_CTX_set_verify(SSL_VERIFY_PEER)`;
+`SSL_CTX_load_verify_locations` with its return tested against 1; the decided host written on
+the context's `X509_VERIFY_PARAM` with partial wildcards off; and `SSL_get_verify_result`
+inspected on the aborted handshake *and* again after a successful one. Three of the four would
+have been F-020 with more code in it. The context assertions are read off a context the test
+owns, and `Context.FreshContextVerifiesNothing` establishes that each of them is a witness of
+something the component did rather than of OpenSSL's defaults — that dual is what makes the
+battery worth trusting. `LOGON` is unreachable by construction, not by a check: every refusal
+sets `Failed` and returns before `SendBoltHandshake` and before the receive thread starts.
+
+**T-27's fourth argument: behaviour, not signature.** The first criterion's *Given* enumerates
+the situation (an endpoint, a transport, `UseSSL`); its *Then* constrains the member — private,
+static, reads only its arguments, returns the four fields as data — and says nothing about
+arity. The fifth criterion then requires the verified name to be the routing-supplied backend's,
+which three arguments cannot express without overloading the endpoint and losing `+ssc` on the
+reconnect. Read together the criteria require the fourth argument; `DecideTransportSecurity` is
+right and DEC-024's third rejected alternative is the correct reading of its own story.
+
+**The WebSocket criterion is discharged, by both limbs rather than one.** The decision is taken
+from the same function before the branch (`:287`) and the WS branch reads `ActiveSecurity`; and
+C-neo4j's `### What an encrypted connection guarantees, by transport` states the difference in
+both directions — stricter (`+ssc` unhonourable, which the code also warns about at connect
+time) and weaker (the two engine-level inputs, and F-055's routing redirect through
+`wss+insecure://`). It covers F-055 in the detail the criterion's purpose clause requires, and
+goes further than the criterion asked by naming the transport a caller should choose. The one
+criticism is where the statement is not: see the finding below.
+
+**The finding, major, in this diff.** `Neo4jComponent.h:118-122` adds to `UNeo4jComponent`'s
+class doc comment — therefore to the class's reflected ToolTip — the unqualified sentence "An
+encrypted connection is also an authenticated one: `bolt+s://` and `neo4j+s://` require the
+server's certificate to chain to a trust anchor and to carry the host's name, and the connection
+is refused — before any credential is sent — when it does not", followed by "`bolt+ssc://` and
+`neo4j+ssc://` are the documented way to accept a self-signed certificate". Both sentences are
+false on the WebSocket transport, which the same class exposes as a `Transport` property: F-055
+and the engine's `bDisableCertValidation` defeat the first, and the component's own warning at
+`:336-343` contradicts the second. This is the exact unqualified sentence CR-012 (J-0199) refused
+to put in the contract, as "a lie by omission", and the header is the surface more readers meet.
+Reported to the lead; the fix is to scope both sentences by transport as the contract does, and
+to mirror that in `FANTASIA/Source/FANTASIA/CLAUDE.md`'s new invariant, which the next agent
+loads. It should be fixed before F-020 is closed: closing F-020 beside that sentence is how
+F-055 gets forgotten.
+
+## J-0214 | 2026-11-15 | NOTE | reviewer
+- Event: verdict
+- Story: US-034
+- Verdict: does not meet request
+- Open findings: F-032, F-033, F-049, F-059; one new minor reported to the lead: a test label in Neo4jTransportQualityTests.cpp:113 asserting the opposite of what the tooltip says
+- Evidence: OpenAICompatibleComponent.h:84-96 against :128-141; RESTTTSComponent.h:319-326; SecretConfigTests.cpp:149-188; gate report e093da91568a 198 tests 0 failures (read, not re-run)
+- Changes: none
+
+**Verdict: does not meet request.** The second, third and fourth criteria are met. The first
+is not, and the ruling the lead asked for is that it is two different things, with two
+different remedies — one of which is a coder's and is owed now.
+
+**Evidence.** `OpenAICompatibleComponent.h:84-96` (`Config`'s doc comment, which names
+`DefaultGame.ini` and the asset trap and says nothing about any preset) against `:128-141`
+(`ApplyPreset`'s, which carries the whole sentence); `RESTTTSComponent.h:319-326`;
+`SecretConfigTests.cpp:149-188`; the 19:03:33 gate report, 198/0, read rather than re-run.
+
+**Not unsatisfiable: unmet, then wrong.** The first clause — that `Config`'s metadata name
+`Apply Provider Preset` as a call that replaces the whole configuration including the key — is
+plainly satisfiable, by one sentence on `Config`'s own comment, and it was not done. No test
+asserts anything on `Config`'s ToolTip; the coders' test reads the function's, and the tester's
+`Quality.Tooltip.ConfigAndPreset` pins `Config`'s silence as current behaviour. I do not accept
+"its metadata" as reaching a sibling function's: `FProperty::GetMetaData` and
+`UFunction::GetMetaData` are different fields of different objects, which the two tests
+demonstrate by having to look in two places, and the story's own narrative settles it — "I want
+the editor to tell me what erases that key" is a sentence about where a user is looking when
+they decide where the key goes, which is the Details panel on `Config`. So this half is a
+defect, not an interpretation, and the remedy is one sentence of core-dev's and one literal in
+the test.
+
+The second clause — that the metadata say the key must be set again after the preset — is also
+satisfiable, which is why I do not call the criterion unsatisfiable; it is *wrong*. Satisfying
+it would print, in the editor, the advice that puts a key into a committed Blueprint graph:
+ADR-0001's defect by a second route, and the trap F-032 exists to warn about. T-29's refusal was
+correct and what it wrote instead is the honest alternative. The distinction from US-029's case
+matters for the remedy: an impossible criterion has to be deleted before the story can ever pass
+(CR-009), while a wrong one has to be corrected because meeting it would damage the product, and
+the coder who refused it should be recorded as right rather than as non-compliant.
+
+So: the criterion is amended by change request, which is the user's — move the first clause onto
+`Config`'s own metadata and replace the set-again clause with the ini route T-29 documented —
+and even after that amendment the story is not met until the sentence lands on `Config`. The
+amendment is not what closes this; a sentence is.
+
+**One finding of my own, reported to the lead.** `Neo4jTransportQualityTests.cpp:113` asserts
+`OnPreset.Contains(TEXT("again"))` under the label "and that the key is set again afterwards".
+The tooltip's actual sentence is "Setting the key again after the preset makes it a literal in a
+Blueprint graph, which is committed" — the opposite advice. The substring cannot tell one from
+the other, and the label makes the gate report state, in green, that the clause T-29 deliberately
+refused is satisfied. That is a test laundering an unmet criterion; the literal should be the ini
+route the tooltip actually recommends. Minor, M-tests, the tester's file. F-049 and F-059 remain
+open and are untouched by this verdict.
+
+## J-0215 | 2026-11-15 | F-061 | reviewer
+- Event: opened
+- Kind: security
+- Severity: major
+- Story: US-031
+- Module: M-neo4j
+- Repro: Neo4jComponent.h:118-122, in the class doc comment and so in its reflected tooltip, states 'An encrypted connection is also an authenticated one' and that '+ssc' is the way to accept a self-signed certificate. Both are false on the WebSocket transport, which the same class exposes as a property: F-055 and the engine-wide bDisableCertValidation defeat the first, and the component's own warning at :336-343 contradicts the second.
+- Changes: none
+
+The sentence CR-012 refused to put in C-neo4j as a lie by omission, written instead into the surface more integrators read. core-dev is scoping both sentences by transport, and the same invariant in FANTASIA/Source/FANTASIA/CLAUDE.md with them. Blocks the 5.8 release: a false promise about server authentication is the defect class F-020 was.
+
+## J-0216 | 2026-11-15 | F-062 | reviewer
+- Event: opened
+- Kind: quality
+- Severity: minor
+- Story: US-032
+- Module: M-neo4j
+- Repro: backlog.md:479 (US-032's acceptance criterion) and verification/core-dev.md:81 both state that both of InitiateConnection's call sites pass a bare hostname and the branch is therefore unreachable. F-055 disproved that: ReconnectToBackendAddress passes a server-supplied routing record with its scheme intact. J-0194 corrects it in the journal only.
+- Changes: none
+
+US-032 is ready and heads S-03, so an S-03 agent reads a false premise inside the criterion it implements - and the correction's conclusion, that the branch must not be deleted as tidiness because deleting it closes a vulnerability, is exactly what the stale text hides.
+
+## J-0217 | 2026-11-15 | F-063 | reviewer
+- Event: opened
+- Kind: quality
+- Severity: minor
+- Story: US-030
+- Module: M-neo4j
+- Repro: C-neo4j Version 3 names F-011, F-012, F-048 and F-055 but omits F-056, F-057 and F-060 where its Invariants state the cap's guarantee, so the omission reads as a statement that nothing else is open. Its sentence that a large result is many bounded messages and never one big one is the reassurance F-060 falsifies.
+- Changes: none
+
+## J-0218 | 2026-11-15 | F-064 | reviewer
+- Event: opened
+- Kind: quality
+- Severity: minor
+- Story: US-034
+- Module: M-tests
+- Repro: Private/Quality/Neo4jTransportQualityTests.cpp:113 asserts the tooltip Contains('again') under the label 'and that the key is set again afterwards', against a sentence that reads 'Setting the key again after the preset makes it a literal in a Blueprint graph, which is committed'. The substring cannot tell the advice from its refusal, so the gate reports in green that the clause T-29 deliberately refused is satisfied.
+- Changes: none
+
+## J-0219 | 2026-11-15 | F-065 | reviewer
+- Event: opened
+- Kind: performance
+- Severity: minor
+- Story: US-030
+- Module: M-neo4j
+- Repro: ReadMap calls Require(Count), so a Map32 declaring Count = bytes-remaining passes and Map.Reserve(Count) allocates about 56 bytes per wire byte before the element loop refuses. DEC-020 rejected 2*Count for int32 overflow, correctly; the division form has none and is the valid necessary condition: Count > (Data.Num() - Cursor) / 2.
+- Changes: none
+
+Halves the worst-case map reserve for one changed expression. Rides with F-056's budget fix, not before it (P-07).
+
+## J-0220 | 2026-11-15 | F-066 | reviewer
+- Event: opened
+- Kind: performance
+- Severity: minor
+- Story: US-031
+- Module: M-neo4j
+- Repro: BeginPlay to InitiateConnection to TcpConnect runs ApplyTlsVerification (trust-store parse, measured median 6.72 ms, p95 11.29 ms, max 13.70 ms) then the blocking BIO_do_connect and BIO_do_handshake, all on the game thread. ReconnectToBackendAddress is reached from HandleServerMessage, which the recv loop dispatches to the game thread, so a routing reconnect blocks it again mid-session.
+- Changes: none
+
+FANTASIA/Source/FANTASIA/CLAUDE.md states that every component doing I/O dispatches off the game thread; C-neo4j says only that queries do. Either the code or the invariant is wrong and nothing records which. Pre-existing for the connect, new and now measured for the 6.72 ms, which an Aura session pays twice. Not US-031's to fix.
+
+## J-0221 | 2026-11-15 | DEC-026 | core-dev
+- Module: M-neo4j
+- Decision: The Blueprint tooltip and the module state document state the encryption guarantee per transport, mirroring C-neo4j's 'What an encrypted connection guarantees, by transport', instead of making one unqualified claim.
+- Reason: UNeo4jComponent exposes Transport as a property, so the class tooltip is read by users of both framings. The unqualified sentence T-27 added was true only on PlainTCP: on WebSocket the engine owns verification, '+ssc' cannot be honoured at all (warned at Neo4jComponent.cpp:333-343), and '+s' is defeated by [LwsWebSocket] bDisableCertValidation, -lws-insecure=true, or a routing record carrying wss+insecure:// (F-055). A wrong promise about server authentication is the defect class F-020 was, and CR-012 had already refused the unqualified form in C-neo4j hours earlier.
+- Changes: FANTASIA/Source/FANTASIA/CLAUDE.md
+
+Alternatives rejected: (a) delete the two sentences — leaves the PlainTCP guarantee, which is real and is what a reader needs in order to choose the transport, undocumented in the one place they see it; (b) keep the claim and add a 'see C-neo4j' pointer — a tooltip is read where it stands, so a pointer does not retract a promise; (c) state the qualification only in the contract and leave the header unqualified — the header is the surface more people read, which is exactly how this defect reached users. Also rewrote Source/FANTASIA/CLAUDE.md's invariant to the per-transport form and said why, since that file is what the next agent loads and it stated the unqualified form too. No code, no specifier and no contract text changed; the gate was deliberately not run (build-dev mid-ship-task).
+
+## J-0222 | 2026-11-15 | DEC-027 | build-dev
+- Module: M-dist
+- Decision: The NVIDIA ACE/Mark/James/Claire fetches become opt-in (--ace/--mark/--james/--claire/--characters/--nvidia) and sit behind a single NVIDIA_AVAILABLE=0 gate in bootstrap.bat; bootstrap.sh gets the same flags, and a GPU_ASSET_AVAILABLE=0 gate for the Linux CUDA whisper stack. Asking for a gated artifact prints why and exits 1 before anything is downloaded. The --no-* forms stay accepted as no-ops.
+- Reason: F-014: the opt-out default asked runtime-v3.0 for four nv-*-ue58 assets that do not exist, and curl --fail || exit /b 1 aborted a fresh clone's install. The same was true of bootstrap.sh's fantasia-gpu-cuda13-linux.tar.gz, which no release has ever carried (both confirmed 404 against the live release). The UE 5.8 line ships core-only, so core-only is now the default and the three core assets all resolve 200.
+- Changes: none
+
+Alternatives rejected: (1) delete the NVIDIA fetch machinery, which would have to be rewritten when the 5.8 bundles are built - instead one constant per unpublished artifact keeps the wiring live and self-documenting, and flipping it is the whole change needed at publish time. (2) Let the default run attempt the fetch and merely warn on failure: a 404 mid-run leaves a half-installed tree and teaches users to ignore errors. (3) Fail late, after the core artifacts land: the request is explicit, so refusing up front costs the user nothing and leaves no partial state. Side effect fixed in passing: --enable-plugins used to live inside the NVIDIA placement branch, so a core-only run would have silently ignored it; the Plugins/ walk and the enable step now run on every path.
+
+## J-0223 | 2026-11-15 | DEC-028 | build-dev
+- Module: M-dist
+- Decision: FANTASIAACE is marked not-available-for-5.8 in three places rather than deleted or left silent: its .uplugin declares EngineVersion 5.7.0 (truthful - its prebuilt binaries carry BuildId 47537391), its FriendlyName reads 'FANTASIA ACE (UE 5.7 only - NOT available for UE 5.8)' and its Description opens with the refusal and the reason; README marks the Animation row and the Audio2Face section, and Troubleshooting now answers the 'built with a different engine version' dialog by name. The 5.7 binaries are untouched.
+- Reason: F-016: with EngineVersion 5.8.0 the plugin advertised itself as loadable on 5.8 and then failed the module BuildId check (47537391 vs 55116800) with an opaque error. Declaring 5.7.0 makes the engine's own plugin manager state the mismatch up front, and the FriendlyName carries it where a user actually looks - the Plugins browser. The 5.7 line still ships Azure and the 5.6/5.7 branches use these binaries, so deleting them was not an option.
+- Changes: none
+
+Alternatives rejected: (1) remove the FANTASIAACE module from the .uplugin, which would make the plugin load and silently do nothing - worse than a refusal. (2) README only: a user who copies both folders never reads it before the editor fails. (3) Delete the 5.7 binaries: forbidden, they are the 5.7 line's shipped build. This marks the defect, it does not fix it - F-016 stays open until the NVIDIA ACE port to 5.8 exists (see F-014's sibling gate in bootstrap). A core-only install is unaffected either way: FANTASIA.uplugin depends only on AudioCapture and never on FANTASIAACE.
+
+## J-0224 | 2026-11-15 | DEC-029 | build-dev
+- Module: M-dist
+- Decision: The P-12 refresh does not delete the local CUDA whisper build output under FANTASIA/ThirdParty/whisper_cpp/build/. The shared-whisper footgun is verified three ways instead: the two files FANTASIA.Build.cs gates on (build/src/Release/whisper.lib and build/ggml/src/Release/ggml-cuda.lib) are absent, FANTASIA_WHISPER_PREBUILT_CUDA is cleared in the build environment, and both builds log '[FANTASIA-Whisper] Using STAGED SOURCE (CPU only, 24 files)'.
+- Reason: Build.cs has carried an env-var gate since the 2026-07 regression, so lib presence alone can no longer flip the shipped DLL onto the shared-whisper path; and the stray files that do exist (whisper.dll, ggml*.dll, ggml{,-base,-cpu}.lib) are not the ones the gate keys on. Deleting them would destroy a long CUDA compile the user may still want, to remove a risk the guard already removes. The build log line is a stronger check than file absence because it reports the branch actually taken.
+- Changes: none
+
+Verification of the refresh: clean rebuild of FantasiaGateEditor Win64 Development and DebugGame (plugin Intermediate/Build, harness Intermediate/Build and harness Binaries deleted first, so neither run could report 'Target is up to date'), -MaxParallelActions=6 against this machine's 8 GB pagefile, both exit 0. dumpbin /dependents on all four module DLLs shows libswipl.dll as the only non-system, non-engine import; no whisper.dll, ggml*.dll, cudart/cublas or ACE import, and no delay-load section at all. Both .modules carry BuildId 55116800 (UE 5.8). no-ACE comes from the gate harness .uproject enabling FANTASIA only.

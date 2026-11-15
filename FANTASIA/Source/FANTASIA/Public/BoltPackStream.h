@@ -127,6 +127,14 @@ private:
  *
  * Constructed with a raw byte buffer; call ReadValue() repeatedly until
  * HasMore() returns false.
+ *
+ * The buffer comes off a socket, so nothing in it is trusted. Every read is
+ * bounded against the buffer *before* it happens, and a length, an element
+ * count or a nesting depth the buffer cannot satisfy is refused rather than
+ * clamped: the reader logs the reason once, yields a null value, and reports
+ * itself exhausted, so `HasMore()` is false and every later `ReadValue()`
+ * refuses too. A refusal inside a nested value propagates outwards as a null
+ * value — a partially decoded message is never returned.
  */
 class FANTASIA_API FBoltPackStreamReader
 {
@@ -134,16 +142,34 @@ public:
 	/** Construct a reader over @p InData. Does not copy the buffer. */
 	FBoltPackStreamReader(const TArray<uint8>& InData);
 
-	/** Read and return the next PackStream value. */
+	/** Read and return the next PackStream value; a null value on refusal. */
 	FBoltValuePtr ReadValue();
 
-	/** Returns true if unread bytes remain. */
+	/** Returns true if unread bytes remain and the reader has not refused. */
 	bool HasMore() const;
 
 	/** Peek at the next marker byte without advancing the cursor. */
 	uint8 PeekMarker() const;
 
 private:
+	/** Refuse the rest of the buffer: log @p Reason once and exhaust the reader. */
+	void Refuse(const FString& Reason);
+
+	/**
+	 * True when @p NumBytes more bytes are readable; refuses and returns false
+	 * otherwise, negative values included. Called before every read, Reserve and
+	 * Append — never after one. A declared element count is bounded by the same
+	 * test, because every element costs at least one byte.
+	 */
+	bool Require(int32 NumBytes);
+
+	/** @p Depth counts enclosing containers; it is a parameter so no path can forget to undo it. */
+	FBoltValuePtr ReadValue(int32 Depth);
+	FBoltValuePtr ReadMarkedValue(int32 Depth);
+	FBoltValuePtr ReadList(int32 Count, int32 Depth);
+	FBoltValuePtr ReadMap(int32 Count, int32 Depth);
+	FBoltValuePtr ReadStructure(int32 NumFields, int32 Depth);
+
 	uint8 ReadByte();
 	uint16 ReadUInt16BE();
 	int16 ReadInt16BE();
@@ -153,4 +179,5 @@ private:
 	FString ReadStringOfLength(int32 Length);
 	const TArray<uint8>& Data;
 	int32 Cursor = 0;
+	bool bRefused = false;
 };

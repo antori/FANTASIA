@@ -316,6 +316,15 @@ public:
 	 *        this specifier adds an ini source, it does not make the property
 	 *        transient.
 	 *
+	 *        `LoadConfig` reads the ini section of the instance's **own** class, so a
+	 *        `Headers` line under `[/Script/FANTASIA.RESTTTSComponent]` reaches only a
+	 *        plain `URESTTTSComponent`; a subclass that uses this property needs its
+	 *        own section. The one shipped subclass that uses it is
+	 *        `UACERESTTTSComponent`, whose section is
+	 *        `[/Script/FANTASIAACE.ACERESTTTSComponent]`. The ElevenLabs subclasses
+	 *        build their request headers from their own `Key` property and never read
+	 *        this one.
+	 *
 	 * @note  A project that already typed a key into a Blueprint or actor asset still
 	 *        has that key stored in the asset: this specifier does not clean it
 	 *        retroactively. Clear the value in the asset and re-save it for the key to
