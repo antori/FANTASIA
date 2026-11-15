@@ -6253,3 +6253,19 @@ Dating, checked rather than taken: J-0206 cites ApplyPreset's doc at :128-141 an
 What does not survive as a defect: the criterion's third clause, that the metadata say the key must be set again after the call. Config's note does not say it, and ApplyPreset's says the opposite: setting the key again makes it a literal in a committed Blueprint graph. That is a decision (T-29, ADR-0001), the product is right, and the criterion's wording is what conflicts with it, as J-0208 and J-0214 both ruled. It is not a finding against the product, so no replacement F is opened; the remedy is a change request to US-034's first criterion (move it onto Config, replace the set-again clause with the ini route), which is the lead's and the user's. Until then the test pins the absence on Config (assertion labelled F-059, pinned: the criterion's clause, not a defect), so that a later edit that adds advice to set the key again fails visibly.
 
 J-0208's first half (a location mismatch, fixable) was correct at the time and is now resolved; its second half stands. J-0214's evidence line against :84-96 is stale on the same account; its conclusion on the criterion's second clause stands. Not touched: F-064, the label at :113 on ApplyPreset's "again" assertion, still open.
+
+## J-0239 | 2026-11-16 | NOTE | lead
+- For: REQ-001, US-020, US-021
+- Changes: none
+
+UE 5.8 is on main. The user promoted it themselves ('Promote to main'), as main requires.
+
+origin/main moved 897275e0 -> 922f1e1f as a fast-forward; 897275e0 remains an ancestor, so no history was rewritten and the branch's force-push protection was never challenged. origin/main, origin/Development and the local tip are all 922f1e1f.
+
+What main now carries, read back from the remote ref: both .uplugin files at EngineVersion 5.8.0 with FANTASIAACE under its own name again; bootstrap.bat with RELEASE_TAG=runtime-v3.0, NVIDIA_AVAILABLE=1 and the four NVIDIA fetches on by default; and no GroqComponent, OllamaComponent or OpenAIComponent, the 737 lines the 5.8 migration removed, which the merge of main resolved as our deletion.
+
+Evidence at the moment of promotion. Gate report a680c4cc0aa8: 198 tests, 0 failed, 0 not run, every test Success, and no source file newer than that report. dumpbin on the shipped runtime module: libswipl.dll the only non-system import, no whisper.dll. All four .modules at BuildId 55116800. All five nv-*-ue58 assets on runtime-v3.0 served over their public download URLs at HTTP 200 with content-length matching the local archives byte for byte.
+
+What is not evidenced: nobody has run bootstrap.bat from a clean clone and driven a MetaHuman through Audio2Face on 5.8. The ACE 5.8 port building all four plugins from a one-line change is strong evidence that it works; it is not an observation that it does. F-014 and F-016 are closed on the distribution facts, not on an end-to-end run.
+
+Owed still: a change request on US-034's first criterion (its set-the-key-again clause conflicts with ADR-0001, see J-0238), S-02's close, and F-070 on the stale-evidence practice that nearly let a red gate onto this branch.
