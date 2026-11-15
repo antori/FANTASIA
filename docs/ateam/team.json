@@ -1,6 +1,6 @@
 {
- "ateam_version": "0.26.0",
- "as_of": "J-0140",
+ "ateam_version": "0.28.0",
+ "as_of": "J-0231",
  "version": 1,
  "design_version": 4,
  "mode": "subagents",

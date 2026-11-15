@@ -6100,3 +6100,33 @@ F-013 records the stale directory name as cosmetic. It is not: the name collisio
 Accepted with its cost stated: a roughly 5.2 GB release carrying about 3.3 GB of byte-identical model data, and three assets near GitHub's 2 GB per-asset limit. The shared-asset alternative is recorded in J-0228 and needs no NVIDIA source change, so it remains available if the limit is ever hit or a user complains about downloading 1.5 GB for one character.
 
 What the decision buys: the bundles stay self-contained and match how NVIDIA ships, bootstrap needs no placement logic beyond what it already has, and a 5.8 release does not introduce a new structure at the same time as a new engine line.
+
+## J-0231 | 2026-11-15 | NOTE | ateam-update
+- Update: ATeam 0.26.0 -> 0.28.0
+- Changes: team.json
+
+Done:
+- rendered agent definitions: planner (updated), core-dev (updated), speech-dev (updated), reasoning-dev (updated), build-dev (updated), test-dev (updated), tester (updated), security (updated), reviewer (updated)
+- CLAUDE.md protocol block updated
+
+Decisions still pending (/ateam:update):
+- no advisor, whom an agent that cannot conclude escalates to (on Fable, run only on the user's approval): add one through /ateam:change (type team)
+
+## J-0232 | 2026-11-15 | NOTE | lead
+- Changes: none
+
+Release 5.8, upload in flight: the user approved committing the release-truth edits (bootstrap.bat NVIDIA_AVAILABLE and fetch defaults, FANTASIAACE.uplugin back to 5.8.0, README) once all five nv-*-ue58 bundles have landed on runtime-v3.0 -- their words: 'Commit when landed'. The upload runs at ~1.5 Mbps over Wi-Fi (single sequential gh stream, straight to GitHub, not via the VPN), so ~6 h for the remaining 4.23 GB; only the 966 KB overlay had landed when measured. Verified meanwhile: BuildId 55116800 on all four module manifests, FANTASIATests is UncookedOnly so it is excluded from cooked games, and UnrealEditor-FANTASIA.dll imports only libswipl.dll (no whisper.dll). F-013 stays open by decision: renaming NVIDIA-UE57-Bundle would strand gigabytes outside .gitignore:45 and make C-install.md:23,47 stale, which needs a CR; its upgrade consequence (a 5.7-populated staging dir makes the 5.8 fetch skip silently) is covered by a warning in build-dev's files instead. The promotion to main is NOT a fast-forward: origin/main carries 10 commits Development lacks, including the deprecated OpenAI/Groq/Ollama code 5.8 deleted.
+
+## J-0233 | 2026-11-15 | DEC-031 | build-dev
+- Module: M-dist
+- Decision: bootstrap.bat's NVIDIA_AVAILABLE gate now distinguishes a named NVIDIA flag (NV_EXPLICIT) from the default: with the flag off, a default run drops the four NVIDIA fetches and installs the core, while a run that named --ace/--mark/--james/--claire/--characters/--nvidia is still refused with an explanation and exit 1.
+- Reason: T-33 flips the four FETCH_* defaults to 1 for the 5.8 line. The old gate refused whenever any FETCH_* was 1, so with the new defaults a bare bootstrap.bat on a future engine line whose hand-port is not yet published would refuse everything and exit 1 - bricking the core install. The gate is kept for the next engine bump, so it has to stay correct under the new defaults.
+- Changes: none
+
+Alternatives rejected: (a) leave the gate refusing on any requested bundle - makes NVIDIA_AVAILABLE=0 unusable once the defaults are on; (b) drop the gate entirely - loses the up-front refusal that beats a 404 from curl after a gigabyte of core artifacts, and the lead asked for the mechanism to stay; (c) auto-off with no refusal at all - a user who typed --nvidia would get a silent core-only install. Verified by running the parse loop and gate in isolation with NVIDIA_AVAILABLE forced to 0 and to 1 across seven flag combinations.
+
+## J-0234 | 2026-11-15 | F-014 | lead
+- Event: fixed
+- Evidence: gh release view runtime-v3.0 now lists all four NVIDIA assets in state 'uploaded', at byte sizes identical to the local archives they were packaged from: nv-ace-reference-ue58-full.tar.gz 689029094, nv-audio2face-mark-ue58.tar.gz 1509920991, nv-audio2face-james-ue58.tar.gz 1509911871, nv-audio2face-claire-ue58.tar.gz 1510351662, plus nv-ace-reference-ue58-overlay.tar.gz 966626 and the three unchanged core assets. The bundles are the UE 5.8 hand-port (BuildId 55116800), not the ue57 builds F-014 ruled out. bootstrap.bat's NVIDIA_AVAILABLE and the four FETCH_* defaults are back to 1 in da759764, so the unflagged run installs everything again as ADR-0008 and C-install require.
+- Commit: da759764
+- Changes: FANTASIA/bootstrap.bat, FANTASIA/bootstrap.sh, FANTASIAACE/FANTASIAACE.uplugin, README.md
