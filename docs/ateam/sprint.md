@@ -1,84 +1,77 @@
 # Current sprint
-- As of: J-0169
-- Current sprint: S-02
+- As of: J-0244
+- Current sprint: S-03
 - Sprint length: one working session
 - Definition of Ready: story passes INVEST; acceptance criteria in Given/When/Then; a Tests path is named; the modules it touches list it in their Satisfies lines
 - Definition of Done: the quality gate passes; tester report with no open blocker finding; reviewer verdict "meets request" with no blocker; implementation decisions logged as DEC entries; checker clean; no ownership violation logged; the user accepted the story at review
 
 Note on the gate clause: `gates.task_completed` is
 `powershell -NoProfile -ExecutionPolicy Bypass -File FANTASIA/run-tests.ps1`, and "the
-quality gate passes" means that command. It runs 150 tests, holds an exclusive harness lock
+quality gate passes" means that command. It runs 198 tests, holds an exclusive harness lock
 so only one run proceeds at a time, and fails below its `-MinTests` floor of 134.
 `gates.quality` is still empty for both cpp and csharp.
 
-### S-02: A Neo4j connection safe to point at a real server
-- Status: active
-- Goal: Close the two blocker findings that make the Bolt connection unsafe against a real server - an unbounded message reader (F-021) and a TLS path that authenticates nobody (F-020) - so that US-014 returns to done and the 5.8 ship stops waiting on them.
-- Budget: $160
-- Stories: US-030, US-031, US-034
-- Target line: 5.8 for all three
+### S-03: not planned
+- Status: planned
 
-**Why two stories and not three.** US-014's `Blocked by:` line names F-020 and F-021 and
-not F-011, so closing exactly these two returns US-014 to `done` and unblocks US-020 and
-US-021. F-011 sits on its `Known defect:` line and on no critical path. US-032 is refined
-to `ready` and **held for S-03**: it depends on the seam US-031 builds, so holding it costs
-no rework, and shipping `UseSSL`'s removal in the same release as US-031's verification
-change would put two breaking migrations of the same property of the same component into
-one release note.
+There is no goal yet. The goal is the user's and the plan is theirs to confirm; what the
+sprint starts from is below.
 
-**US-033 is out.** It is `ready` and would occupy otherwise idle coders, but it is M-asr and
-does not serve this goal; S-01's retrospective named scope discipline as the thing most
-likely to be tested next. It heads the S-03 candidates with US-032.
+## Two change requests are owed first, and both are the user's
 
-**US-034 is off-goal and included because the user asked for it** — F-032's and F-033's
-tooltips, two doc comments and one assertion.
+- **US-034's first criterion.** It asks `UOpenAICompatibleComponent::Config`'s metadata to
+  say the key must be set again after `Apply Provider Preset`. Printing that advice is what
+  ADR-0001 exists to prevent, so the product is right and the criterion is wrong. The change
+  moves the clause onto `Config` and replaces set-again with the ini route the metadata
+  already gives. Until it lands US-034 cannot be `done`: the verdict standing against it is
+  J-0214 "does not meet request", and the order is the change request, then a fresh verdict
+  against the present state, then `done`. The precedent is CR-009 on US-029 (J-0143), where
+  the criterion was amended and the reviewer then issued "meets request against the criterion
+  as amended" — not US-028, whose verdict was "meets request" with a residual finding.
+- **US-014's first acceptance criterion** is now coarser than the behaviour. It promises that
+  handshake, authentication and query exchange succeed against a local install "with or
+  without TLS"; after US-031 a self-signed certificate on `bolt+s://` is refused and needs
+  `bolt+ssc://`. US-014 is `done` on the criterion as written, which is why this is a change
+  request and not a defect.
 
-## Tasks
+## Carried from S-02
 
-| Task | Story | Module | Owner | Est | Effort | Depends on |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| T-24 | US-030 | M-neo4j | core-dev | M | **high** | — |
-| T-26 | US-031 | M-dist | build-dev | XS | low | — |
-| T-29 | US-034 | M-llm | core-dev | XS | low | — |
-| T-30 | US-034 | M-tts | speech-dev | XS | low | — |
-| T-25 | US-030 | M-tests | security | S | high | T-24 |
-| T-27 | US-031 | M-neo4j | core-dev | M | **high** | T-25 |
-| T-31 | US-034 | M-tests | test-dev | XS | medium | T-29, T-30 |
-| T-28 | US-031 | M-tests | security | S | high | T-26, T-27 |
-| T-32 | US-030, US-031 | contracts | planner | S | high | T-25, T-28 |
+- **US-034** (`in-progress`) — built, gate green, accepted by the user at J-0242, and blocked
+  only on the change request above and the verdict that follows it. Its residuals F-049 and
+  F-064 are minor.
 
-The serial chain is **T-24 → T-25 → T-27 → T-28 → T-32**, and it is the sprint: all of
-M-neo4j is core-dev's, so one coder runs the critical path. T-26 starts first in parallel
-(it only adds OpenSSL to the test module so T-28 can assert the TLS *context*, not merely
-the TLS *decision*). T-29, T-30 and T-31 are off the chain entirely.
+## The candidates, in the order S-02 left them
 
-Task detail — each task's `focus:` for the reviewer and its `security:` line — is in the
-journal at J-0165. The stories carry their own acceptance criteria.
+- **US-032** (`ready`) — removes `UseSSL` (CR-010, approved). It depends on the seam US-031
+  built, so holding it cost no rework. **F-062** (minor, open) records a false premise inside
+  its criterion; it is the planner's and should be fixed before the story is dispatched.
+- **US-033** (`ready`) — the injectable capture seam, closing F-018. Two tasks: speech-dev's
+  seam, then test-dev's tests. It is M-asr and was off S-02's goal, which is why it waited.
 
-## Decisions this sprint runs under
+## What the retrospective put on the table
 
-- **DEC-019** (J-0164, ruling at J-0166): the security engineer writes the batteries under
-  `FANTASIA/Source/FANTASIATests/Private/Security/`, which it owns. No security review runs
-  on T-24 or T-27, the two implementation tasks whose tests it wrote. The backstop is the
-  tester's independent pass on the landed fix, which is where independence showed in S-01.
-- **CR-010** (approved, J-0161): US-032 removes `UseSSL`. Not in this sprint.
-- **US-031 breaks a working configuration** (J-0163, user-confirmed): a self-signed
-  certificate on `bolt+s://` stops connecting. The one-character migration, `bolt+ssc://`,
-  must appear in the failure's log message and in C-neo4j.
-- **No CR for the dechunker.** `FBoltDechunker` carries no `FANTASIA_API` (F-012), so
-  US-030's message cap is enforced on `UNeo4jComponent`'s side. If core-dev concludes the
-  cap can only live inside the dechunker, **the task stops for a CR** rather than exporting
-  a class in passing.
+- **F-070** (major, open) — a gate report is evidence for the tree it ran on and no other.
+  S-02 used one report as standing evidence across changes made after it, which is how a red
+  suite reached `origin/Development` and came within a step of main. The preventive measure is
+  written into the finding.
+- **F-052** (major, open) — `.ateam/ownership.jsonl` does not exist, so it records nothing,
+  and two cross-ownership edits happened unlogged. Enforcement cannot be argued from an empty
+  log until a sprint measures ownership for real.
+- **`gates.quality` is empty for cpp and csharp**, unchanged since S-01, so the coders'
+  clean-code promise still has no mechanical check. This is the third sprint it has been owed.
+- **Scope discipline was tested and failed**, exactly as S-01's retrospective predicted: S-02
+  fixed five findings that blocked none of its stories and that it never planned — F-014,
+  F-016, F-050, F-051 and F-059.
+- **Eight major findings opened during S-02 are still open**: F-048, F-052, F-055, F-056,
+  F-060, F-061, F-069 and F-070. The sprint opened 23 findings in all, 9 major and 13 minor,
+  and closed 3 of them.
 
-## Not in this sprint
+## Not in the next sprint unless the user says otherwise
 
-- **US-032** (`ready`) and **US-033** (`ready`) — the S-03 candidates, above.
-- **F-012 and the Neo4j half of F-007.** P-19 keeps both off the 5.8 line and CR-004 does
-  not reach them: F-012 is minor and quality, and exporting `BoltProtocol.h` widens
-  C-neo4j's surface. Closing F-012 needs a change request on the 5.9 line.
-- **F-047** (minor) — two unreachable regions in `Neo4jComponent.cpp`. US-032 takes the
-  `ws://`→`wss://` upgrade with the property it refers to; the unreachable branch at
-  `:166-178` is F-047's and must not be swept into either story (P-07).
-- **The prebuilt DLL refresh** (P-12), which belongs with the promotion to main.
-- **`gates.quality` for C++**, and **measures for NFR-001 to NFR-003**, both unchanged
-  from S-01.
+- **F-012 and the Neo4j half of F-007.** P-19 keeps both off the 5.8 line. Closing F-012
+  needs a change request, since nothing in `BoltProtocol.h` carries `FANTASIA_API` and
+  exporting it widens C-neo4j's surface.
+- **F-047** (minor) — the unreachable regions in `Neo4jComponent.cpp`. US-032 takes the
+  `ws://` to `wss://` upgrade with the property it refers to; the branch at `:166-178` is
+  F-047's and must not be swept into it (P-07).
+- **Measures for NFR-001 to NFR-003**, unchanged from S-01.

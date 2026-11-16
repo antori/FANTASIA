@@ -6269,3 +6269,105 @@ Evidence at the moment of promotion. Gate report a680c4cc0aa8: 198 tests, 0 fail
 What is not evidenced: nobody has run bootstrap.bat from a clean clone and driven a MetaHuman through Audio2Face on 5.8. The ACE 5.8 port building all four plugins from a one-line change is strong evidence that it works; it is not an observation that it does. F-014 and F-016 are closed on the distribution facts, not on an end-to-end run.
 
 Owed still: a change request on US-034's first criterion (its set-the-key-again clause conflicts with ADR-0001, see J-0238), S-02's close, and F-070 on the stale-evidence practice that nearly let a red gate onto this branch.
+
+## J-0240 | 2026-11-16 | F-021 | lead
+- Event: fixed
+- Story: US-030
+- Evidence: Gate a680c4cc0aa8 on 922f1e1f, the commit now on main: FANTASIA.Security.Bolt 18/18, FANTASIA.Stress.Bolt 3/3, and the 36 BoltPackStream codec and round-trip tests, all Success in a run of 198 with 0 failures and 0 not run. FBoltPackStreamReader::Require (BoltPackStream.cpp:192) bounds every read against Data.Num() - Cursor and refuses a negative count; MaxBoltNestingDepth 64 is tested at BoltPackStream.cpp:294; the message cap is enforced on UNeo4jComponent's side because FBoltDechunker carries no FANTASIA_API (F-012), as the sprint plan required rather than exporting a class in passing.
+- Residual: The cap bounds bytes on the wire, not what they decode into - F-056 (major, performance) with F-060 (major, security) deciding its severity, and F-057 (minor) on how the cap is charged. F-048 (major, bug) also remains open against US-030. None is a blocker.
+- Changes: none
+
+## J-0241 | 2026-11-16 | F-020 | lead
+- Event: fixed
+- Story: US-031
+- Evidence: Gate a680c4cc0aa8 on 922f1e1f, the commit now on main: FANTASIA.Security.Neo4jTls 11/11 and FANTASIA.Stress.Neo4jTls 1/1, all Success in a run of 198 with 0 failures. On the plain TCP transport, which is the default, an encrypted connection is now an authenticated one: SSL_CTX_set_verify(SSL_VERIFY_PEER) is set, SSL_CTX_load_verify_locations' return is tested rather than ignored, and X509_VERIFY_PARAM_set1_host pins the host - with X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS asserted as the witness, because set1_host returns success on an empty string and would silently clear the host list. bolt+s:// and neo4j+s:// require a chain to a trust anchor and the host's name; bolt+ssc:// is the one-character migration for a self-signed certificate, and it appears in the failure's log message and in C-neo4j, as J-0163 required.
+- Residual: Scoped, not total, and the header says so per transport (Neo4jComponent.h:118-134). WebSocket only decides: the engine's WebSockets module owns verification there, so the decision is advisory in both directions - that is F-055 (major, security), open, and F-061 (major, security) carries the sentence CR-012 refused to put in C-neo4j. Neither is a blocker. F-020 is closed against the TLS transport this component implements, not against every transport it can select.
+- Changes: none
+
+## J-0242 | 2026-11-16 | NOTE | lead
+- Story: US-030, US-031, US-034
+- For: the S-02 review
+- Changes: none
+
+The user accepted all three stories at the S-02 review. Their words: 'Accept all three'.
+
+The review was presented with the evidence standing on 922f1e1f, the commit now on main, from gate report a680c4cc0aa8 (198 tests, 0 failures, 0 not run): US-030 on FANTASIA.Security.Bolt 18/18, FANTASIA.Stress.Bolt 3/3 and the 36 BoltPackStream codec tests; US-031 on FANTASIA.Security.Neo4jTls 11/11 and FANTASIA.Stress.Neo4jTls 1/1; US-034 on FANTASIA.Quality.Tooltip 2/2 and FANTASIA.Quality.Secrets 15/15.
+
+Disclosed before the acceptance, and accepted with them. Against US-030: F-056 (major, performance) that the 16 MiB cap bounds bytes on the wire rather than what they decode into, F-060 (major, security) which decides F-056's severity, F-057 (minor) on how the cap is charged, and F-048 (major, bug). Against US-031: F-055 (major, security) that on the WebSocket transport the component's decision is advisory because the engine's WebSockets module owns verification, and F-061 (major, security). Against US-034: F-049 and F-064, both minor. None is a blocker, so the Definition of Done's bar on open blocker findings is met; F-020 and F-021 closed at J-0241 and J-0240.
+
+Also disclosed: US-034's first criterion cannot be literally met. Its clause asking the metadata to say the key must be set again after Apply Provider Preset conflicts with ADR-0001, the product is right and the wording is wrong, and the remedy is a change request that has not been raised. The story is accepted on the same footing as US-028 was, with the divergence named rather than hidden. The CR remains owed.
+
+Unusually, the code was already on main when the review ran: the user drove the 5.8 release ahead of the sprint's close, so an acceptance here confirms shipped work rather than authorising a ship.
+
+## J-0243 | 2026-11-16 | NOTE | lead
+- Finding: F-015
+- Module: M-dist
+- Changes: none
+
+Second instance of F-015's root cause, found while considering whether a Linux cloud instance could test bootstrap on a clean machine. F-015's repro names only GPU_ASSET at bootstrap.sh:35. The line below it is wrong in the same way and for the same reason:
+
+  DEPS_ASSET="fantasia-build-deps-win64.tar.gz"
+
+That asset does exist on runtime-v3.0, so unlike the GPU fetch it does not 404 - it succeeds, and extracts Win64 build-time static libraries into a Linux tree at ThirdParty/. A silent wrong-platform install is arguably worse than a failed download, because nothing reports it.
+
+So a default bootstrap.sh run on a clean Linux machine today: fetches the whisper model (correct, engine-agnostic), fails the GPU fetch on an asset that has never existed, and installs Win64 libraries. Taken together these say bootstrap.sh is not a working Linux path at all rather than a working path with one bad asset name - which is the useful form of the finding for whoever fixes it, since the remedy is a decision about whether Linux is supported (NG-2 and P-09 say Win64 is), not two string edits.
+
+Severity unchanged at minor on F-015's own reasoning, and this note does not reopen it.
+
+Practical consequence recorded here because it cost us a test: the Claude cloud environments are Linux, so they cannot verify bootstrap on a fresh machine for this project. What needs verifying is bootstrap.bat, rewritten by 112 lines in da759764, together with Win64-only NVIDIA bundles. Its logic has now been executed locally both ways - an unknown argument prints usage and exits 1, and a run with every fetch disabled reaches the completion summary and exits 0 - but the real download, tar extraction and plugin-move path has still never run.
+
+## J-0244 | 2026-11-16 | S-02 | lead
+- Event: closed
+- Done: US-030, US-031; and US-014 returns to done, which was the goal. US-034 is carried to S-03 as in-progress
+- Review: The user accepted all three stories (J-0242, their words: Accept all three), with the major residuals named before the acceptance. US-030 and US-031 went to done; US-014 followed once F-020 and F-021 closed. US-034 did not: the Definition of Done needs a reviewer verdict of meets request, the verdict standing against it is J-0214 does not meet request, and the user's acceptance satisfies a different clause and cannot substitute. The planner refused the status change on that ground and was right. No story was sent back and no request was rejected this sprint, so there is nothing for the user to confirm or overturn
+- Retrospective: What slowed it: T-31 and T-27 were dispatched in parallel on non-overlapping files, but the test module links the runtime module, so one gate ran against the other's half-written code (rule at J-0188: two code tasks in one compile unit go in sequence); and two cross-ownership edits traceable to my briefs, which is F-052. Findings by kind: 11 quality, 5 bug, 3 security, 3 performance - the security ones (F-055, F-060, F-061) say the threat model's surface did not cover the WebSocket transport, and the performance ones (F-056, F-065, F-066) say NFR-001 to NFR-003 still have no measures, unchanged since S-01. Ownership and comms: .ateam/ownership.jsonl does not exist, so it logged nothing, and two real crossings happened anyway - the empty log is not evidence for switching enforcement on, which is F-052's point. Checker request statistics: 2 accepted, 1 rejected, 1 needs-info, so the brief and the principles are not too thin. Quality tools the gate reports missing: gates.quality is empty for both cpp and csharp, so the clean-code promise still has no mechanical check, third sprint owed. Scope discipline was tested and failed exactly as S-01 predicted: five findings fixed that blocked none of the sprint's stories and were never planned (F-014, F-016, F-050, F-051, F-059). Owed as change requests, none raised yet: US-034's first criterion, US-014's first criterion, and F-070's preventive measure, which is a process change and so belongs in a principle or a verification profile rather than in prose. The code cleanup passes were deliberately skipped: the code was already on main and gate green, and a tidiness pass over shipped code was not worth the risk at that hour
+- Cost: $34.55 at the 2026-11-13 list prices (lead 64%, planner 19%, security 11%); cold-cache rewrites $2.33; flags: 0 - against a $160 budget, but the figure is incomplete: ateam_cost.py read the sprint window as 2026-11-16 only and so missed most of the nine tasks, which ran on 2026-11-15
+- Commit: 922f1e1f
+- Changes: backlog.md, sprint.md
+
+Verification. The gate went from 150 tests to 198, all passing, 0 failures and 0 not run, in report a680c4cc0aa8 against commit 922f1e1f - the commit now on main. The 48 added tests are concentrated where the sprint worked: FANTASIA.Security.Bolt 18 and FANTASIA.Security.Neo4jTls 11, both the security engineer's; FANTASIA.Stress.Bolt 3 and FANTASIA.Stress.Neo4jTls 1, the tester's sprint-level pass; FANTASIA.Quality.Bolt 5, FANTASIA.Quality.Neo4j 5 and FANTASIA.Quality.Tooltip 2.
+
+Findings: 23 opened, 9 major and 13 minor, no blocker; 3 fixed and 1 accepted within the sprint, 19 still open. The two blockers the sprint existed to close are closed with evidence, F-021 at J-0240 and F-020 at J-0241, and F-020's closure is explicitly scoped to the TLS transport this component implements rather than to every transport it can select - the WebSocket gap is F-055 and is open.
+
+Stress measures against NFRs: the stress pass exists as four tests but no NFR gained a measure, so NFR-001 to NFR-003 are in the same state S-01 left them. That is the second sprint running and it is now the oldest item on the board.
+
+The sprint was interrupted by the UE 5.8 release, which the user drove to completion ahead of this close, so the review confirmed shipped work rather than authorising a ship. One defect reached main as a result: F-069, major, where I told build-dev not to fix the staging-directory collision while citing F-013's minor rating, when F-069 was the finding that governed and said in terms that the fix must ship in the same commit as the NVIDIA_AVAILABLE flip. Its fix is in hand and did not need the change request I had feared.
+
+## J-0245 | 2026-11-16 | NOTE | lead
+- For: S-03 planning
+- Story: US-034
+- Changes: none
+
+T-30 was planned and never dispatched, and nobody noticed until the memory tidy-up.
+
+S-02's task table (J-0165) assigned T-30 to speech-dev: the M-tts half of US-034, F-033's tooltip. T-30 appears exactly once in the journal, in that plan, with no dispatch, no DEC and no report. speech-dev concluded during its tidy-up that it did no task in S-02 and was right; my brief to it had implied otherwise, and the sprint ran nine tasks where the plan named ten.
+
+The work landed anyway. RESTTTSComponent.h:319-320 carries the section-rule sentence F-033 asked for, and FANTASIA.Secrets.Tooltip.Headers and FANTASIA.Quality.Secrets.Section.DerivedClass pass in the green gate. So the outcome was reached without the task that was supposed to reach it, which is why nothing failed loudly: the gate cannot tell who wrote a passing test's subject.
+
+F-032 and F-033 both stay open, and this is deliberate rather than an oversight. I came close to closing them on the strength of the tooltips and re-read them first. Neither finding's defect is the missing tooltip:
+
+- F-032's defect is that ApplyPreset assigns Config wholesale and erases a key read from DefaultGame.ini. Preserving the key across that call would change a documented behaviour of C-llm, which P-19 excludes from the 5.8 line. The finding's own words are that the planner may want it for 5.9 and that the tooltip could say so now. The tooltip says so; the behaviour stands.
+- F-033's defect is that LoadConfig reads the ini section of the instance's own class, so a Headers line under the base class reaches only the base class. That is engine behaviour, not a plugin bug, and the finding proposes a tooltip sentence as what 5.8 admits. The sentence is there; the behaviour stands.
+
+So both are open with their admitted mitigation landed, which is a different state from either fixed or accepted, and the journal has no event for it. Worth settling at S-03 planning: either accept them with a Reason naming P-19 and the mitigation, or carry them to 5.9 with F-032's preservation change. Leaving them open with no disposition is what lets them be rediscovered every sprint.
+
+Two process points for the same planning. A task in the plan needs something that fails when it is not dispatched; nine of ten ran and the sprint closed green. And US-034 was accepted while the two findings it was created to address are still open - the acceptance was of its criteria, which is correct, but the story's purpose and its criteria had drifted apart without anyone saying so.
+
+## J-0246 | 2026-11-16 | DEC-032 | build-dev
+- Module: M-dist
+- Decision: bootstrap.bat identifies a staged NVIDIA plugin by a release stamp written inside it - FANTASIA-bootstrap-release.txt, holding the RELEASE_TAG that populated it - and not by the staging directory name. A fetch is skipped only when the plugin is present AND stamped with this release; an absent or mismatched stamp means the content came from another engine line, so that one directory is deleted inside the staging directory and re-fetched. NV_DIR stays NVIDIA-UE57-Bundle.
+- Reason: F-069: the skip predicate asked whether a plugin was extracted here, when the question is whether a plugin for THIS engine line was. The release tag is the right identity - no hardcoded engine BuildId to drift at the next bump, and no rename, so C-install.md:23,47 and architecture.md:296 keep describing a directory that still has that name. Invariant: bootstrap deletes nothing outside the staging directory it creates and git ignores; a plugin already moved into the project Plugins folder belongs to the user and is only mentioned in the notice.
+- Changes: none
+
+Alternatives rejected: renaming NV_DIR per engine line (a C-install + architecture change, and it leaves the old directory on disk forever); pinning the engine BuildId, or an asset-name substring, in the predicate (drifts at every engine bump, and says nothing about what was actually extracted); clearing a plugin already moved into the project's Plugins\ folder (bootstrap must never delete the user's project content, so that case stays with the warning notice, which now also says the staging directory is checked automatically).
+
+Shape notes. --force is untouched, so it still overlays a same-release tree rather than clearing it; only a tree from another release is cleared. The stamp is written last, after the extraction succeeded, so an interrupted run leaves no stamp and the next run replaces what it staged. When a stale tree cannot be removed (a file held open), the run stops with the path to delete by hand instead of extracting onto a half-deleted tree.
+
+Two batch traps are documented in the file beside the code they bite: a .bat invoked without `call` runs in place of its caller and never returns (which is why the test harness needs a real curl.exe shim), and `echo %RELEASE_TAG%>file` reads the tag's trailing digit as a stream number and writes a truncated tag, so the redirection comes first.
+
+## J-0247 | 2026-11-16 | F-069 | lead
+- Event: fixed
+- Story: US-020
+- Evidence: bootstrap.bat's skip predicate now asks whether a plugin for THIS release is staged, not merely whether one is staged. Each extraction writes FANTASIA-bootstrap-release.txt holding RELEASE_TAG inside the staged plugin, per plugin rather than per directory so an interrupted run leaves no stamp; a fetch is skipped only when the plugin is present and stamped with this release, and a tree from another release is cleared inside the staging directory and re-fetched. NV_DIR keeps its name, so .gitignore:45 is untouched and C-install.md:23,47 and architecture.md:296 keep describing a directory that still has that name - no rename and no change request. DEC-032 at J-0246. Verified by me independently of build-dev's 41-check harness, in a scratch copy of the script (cmp byte-identical) placed where no Plugins ancestor could trigger the move step: with a matching runtime-v3.0 stamp the run skips, downloads nothing and exits 0 with the fixture intact; with the stamp removed, which is the 5.7-populated case F-069 describes, it does not skip, prints that this release's build replaces it, attempts the download, and the 5.7 sentinel file is gone - the stale tree was cleared rather than kept. The failed download exits 1 leaving no stamp, so a retry re-attempts instead of trusting a partial. setlocal EnableDelayedExpansion is at line 2, so the !NV_STAMP! comparison is live and not inert text. CRLF preserved: 549 pairs, 0 lone LF, 0 lone CR.
+- Residual: Two cases the stamp cannot see, both pre-existing and neither this finding's. A successful install empties and removes the staging directory, so the next run re-fetches 4.9 GB and then declines to overwrite the copies already in the user's Plugins folder, stranding the fresh ones in staging; fixing that means reading a stamp inside the installed plugin, which needs a decision about touching the user's Plugins folder at all. And the same old predicate is still live on the 5.7 branch, so a clone that bootstraps 5.8 and then checks out 5.7 keeps the 5.8 bundles - Alice is on that line.
+- Changes: none
