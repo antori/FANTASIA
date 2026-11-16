@@ -21,11 +21,18 @@ REM  The NVIDIA ACE/Mark/James/Claire plugins (MIT + NVIDIA Community Model Lice
 REM  fetched into NVIDIA-UE57-Bundle/ and then, if this clone sits inside a UE
 REM  project's Plugins/ folder, MOVED automatically next to FANTASIA there.
 REM  (If no Plugins/ ancestor is found, they're left staged with instructions.)
+REM  An NVIDIA plugin already installed in that Plugins/ folder is left
+REM  exactly as it is, so if this clone installed it for a DIFFERENT engine
+REM  version, delete it there before this run or you keep that other line's
+REM  build. The staging directory needs no such care: each plugin staged
+REM  there records the release it came from, and one from another release
+REM  is replaced automatically.
 REM  DLSS / Streamline are NOT bundled — NVIDIA's RTX SDK license forbids
 REM  standalone redistribution; install them from the Epic Marketplace if you
 REM  want them (not needed for lip-sync).
 REM
-REM  Idempotent: files already present are skipped (size-checked); --force redoes.
+REM  Idempotent: artifacts already present are skipped -- core ones are
+REM  size-checked, NVIDIA plugins release-checked; --force redoes.
 REM
 REM  Usage:
 REM    bootstrap.bat                 install everything (recommended, default)
@@ -52,6 +59,12 @@ set ACE_ASSET=nv-ace-reference-ue57-full.tar.gz
 set MARK_ASSET=nv-audio2face-mark-ue57.tar.gz
 set JAMES_ASSET=nv-audio2face-james-ue57.tar.gz
 set CLAIRE_ASSET=nv-audio2face-claire-ue57.tar.gz
+
+REM Name of the stamp bootstrap drops inside each staged NVIDIA plugin,
+REM holding the release tag that produced it. The staging directory keeps the
+REM same name across engine lines, so the stamp -- not the directory name --
+REM is what says which line a staged plugin belongs to.
+set NV_STAMP_FILE=FANTASIA-bootstrap-release.txt
 
 REM Default: install EVERYTHING. The --no-* flags below turn parts off.
 set FETCH_MODEL=1
@@ -226,14 +239,27 @@ if "%FETCH_MARK%"=="1"  set ANY_NV=1
 if "%FETCH_JAMES%"=="1" set ANY_NV=1
 if "%FETCH_CLAIRE%"=="1" set ANY_NV=1
 if "%ANY_NV%"=="0" goto :done
+REM Each fetch below skips a plugin only when the staged copy carries this
+REM release's stamp, so this line's build replaces whatever another engine
+REM line left in the staging directory. The move step further down cannot do
+REM the same: a plugin already installed in the project's Plugins\ folder
+REM belongs to the user, so it is left alone and only mentioned here.
+echo.
+echo  NOTE: an NVIDIA plugin already in your project's Plugins\ folder is left
+echo        exactly as it is. If this clone installed it for a DIFFERENT engine
+echo        version, delete it there before this run, or it will stay on the
+echo        wrong engine version. The staging directory is checked
+echo        automatically: a plugin in it from another release is replaced.
 if not exist "%NV_DIR%" mkdir "%NV_DIR%"
 
 REM -- ACE A2F runtime --
 if "%FETCH_ACE%"=="1" goto :do_ace
 goto :after_ace
 :do_ace
-if "%FORCE%"=="0" if exist "%NV_DIR%\NV_ACE_Reference\NV_ACE_Reference.uplugin" (
-    echo NVIDIA ACE runtime already present ^(skipping^).
+call :nv_prepare NV_ACE_Reference
+if errorlevel 1 exit /b 1
+if "%NV_SKIP%"=="1" (
+    echo NVIDIA ACE runtime already present for %RELEASE_TAG% ^(skipping^).
     goto :after_ace
 )
 set NV_TGZ=%TEMP%\%ACE_ASSET%
@@ -245,6 +271,7 @@ echo Extracting into %NV_DIR% ...
 "%TAR%" -xf "%NV_TGZ%" -C "%NV_DIR%"
 if %errorlevel% neq 0 ( echo ERROR: failed to extract %ACE_ASSET%. & exit /b 1 )
 del /F /Q "%NV_TGZ%" 2>nul
+call :nv_stamp NV_ACE_Reference
 echo NVIDIA ACE runtime staged.
 :after_ace
 
@@ -252,8 +279,10 @@ REM -- "Mark" character --
 if "%FETCH_MARK%"=="1" goto :do_mark
 goto :after_mark
 :do_mark
-if "%FORCE%"=="0" if exist "%NV_DIR%\NvAudio2FaceMark\NvAudio2FaceMark.uplugin" (
-    echo NVIDIA "Mark" character already present ^(skipping^).
+call :nv_prepare NvAudio2FaceMark
+if errorlevel 1 exit /b 1
+if "%NV_SKIP%"=="1" (
+    echo NVIDIA "Mark" character already present for %RELEASE_TAG% ^(skipping^).
     goto :after_mark
 )
 set NV_TGZ=%TEMP%\%MARK_ASSET%
@@ -265,6 +294,7 @@ echo Extracting into %NV_DIR% ...
 "%TAR%" -xf "%NV_TGZ%" -C "%NV_DIR%"
 if %errorlevel% neq 0 ( echo ERROR: failed to extract %MARK_ASSET%. & exit /b 1 )
 del /F /Q "%NV_TGZ%" 2>nul
+call :nv_stamp NvAudio2FaceMark
 echo NVIDIA "Mark" character staged.
 :after_mark
 
@@ -272,8 +302,10 @@ REM -- "James" character --
 if "%FETCH_JAMES%"=="1" goto :do_james
 goto :after_james
 :do_james
-if "%FORCE%"=="0" if exist "%NV_DIR%\NvAudio2FaceJames\NvAudio2FaceJames.uplugin" (
-    echo NVIDIA "James" character already present ^(skipping^).
+call :nv_prepare NvAudio2FaceJames
+if errorlevel 1 exit /b 1
+if "%NV_SKIP%"=="1" (
+    echo NVIDIA "James" character already present for %RELEASE_TAG% ^(skipping^).
     goto :after_james
 )
 set NV_TGZ=%TEMP%\%JAMES_ASSET%
@@ -285,6 +317,7 @@ echo Extracting into %NV_DIR% ...
 "%TAR%" -xf "%NV_TGZ%" -C "%NV_DIR%"
 if %errorlevel% neq 0 ( echo ERROR: failed to extract %JAMES_ASSET%. & exit /b 1 )
 del /F /Q "%NV_TGZ%" 2>nul
+call :nv_stamp NvAudio2FaceJames
 echo NVIDIA "James" character staged.
 :after_james
 
@@ -292,8 +325,10 @@ REM -- "Claire" character (Audio2Face-3D diffusion model) --
 if "%FETCH_CLAIRE%"=="1" goto :do_claire
 goto :after_claire
 :do_claire
-if "%FORCE%"=="0" if exist "%NV_DIR%\NvAudio2FaceClaire\NvAudio2FaceClaire.uplugin" (
-    echo NVIDIA "Claire" character already present ^(skipping^).
+call :nv_prepare NvAudio2FaceClaire
+if errorlevel 1 exit /b 1
+if "%NV_SKIP%"=="1" (
+    echo NVIDIA "Claire" character already present for %RELEASE_TAG% ^(skipping^).
     goto :after_claire
 )
 set NV_TGZ=%TEMP%\%CLAIRE_ASSET%
@@ -305,6 +340,7 @@ echo Extracting into %NV_DIR% ...
 "%TAR%" -xf "%NV_TGZ%" -C "%NV_DIR%"
 if %errorlevel% neq 0 ( echo ERROR: failed to extract %CLAIRE_ASSET%. & exit /b 1 )
 del /F /Q "%NV_TGZ%" 2>nul
+call :nv_stamp NvAudio2FaceClaire
 echo NVIDIA "Claire" character staged.
 :after_claire
 
@@ -374,3 +410,57 @@ echo  CPU users: nothing else needed; the plugin is ready.
 echo  GPU users: set UWhisperSubsystem.Backend = GPU on the
 echo  subsystem and reopen the editor. The runtime dispatcher
 echo  will load fantasia_whisper_cuda.dll automatically.
+exit /b 0
+
+REM ── Subroutines ────────────────────────────────────────────────────────
+
+REM  :nv_prepare <PluginFolder>
+REM  Answers the question each NVIDIA fetch has to ask: is the plugin for
+REM  THIS release already extracted in the staging directory?
+REM     NV_SKIP=1  yes -- this release's build is staged, skip the download
+REM     NV_SKIP=0  no  -- download it
+REM  A staged plugin is identified by the stamp beside it, never by the
+REM  staging directory's name: that name is fixed across engine lines, so a
+REM  plugin left there by another line carries no matching stamp, reads as
+REM  "from another release", and is deleted before this release's build is
+REM  extracted in its place. Only the staging directory -- which bootstrap
+REM  creates and git ignores -- is ever deleted here; a plugin the move step
+REM  has already installed into the project's Plugins\ folder is the user's,
+REM  and is never touched.
+REM  Exits 1 when a plugin from another release cannot be removed, so that
+REM  the caller stops instead of extracting onto a half-deleted tree.
+:nv_prepare
+set "NV_SKIP=0"
+if not exist "%NV_DIR%\%~1\" exit /b 0
+set "NV_STAMP="
+if exist "%NV_DIR%\%~1\%NV_STAMP_FILE%" set /p NV_STAMP=<"%NV_DIR%\%~1\%NV_STAMP_FILE%"
+if /I not "!NV_STAMP!"=="%RELEASE_TAG%" goto :nv_replace
+if not exist "%NV_DIR%\%~1\%~1.uplugin" goto :nv_replace
+if "%FORCE%"=="0" set "NV_SKIP=1"
+exit /b 0
+
+:nv_replace
+echo.
+echo  This staged NVIDIA plugin is not from %RELEASE_TAG% ^(another engine
+echo  line left it there^), so this release's build replaces it:
+echo      %NV_DIR%\%~1
+rmdir /S /Q "%NV_DIR%\%~1" 2>nul
+if not exist "%NV_DIR%\%~1\" exit /b 0
+echo.
+echo  ERROR: this directory holds an NVIDIA plugin from another release and
+echo         could not be removed:
+echo             %NV_DIR%\%~1
+echo         Something is holding a file open in it. Close the editor and
+echo         anything browsing that folder, delete that one directory by
+echo         hand, then run bootstrap.bat again.
+exit /b 1
+
+REM  :nv_stamp <PluginFolder>
+REM  Records the release that populated a freshly extracted plugin. Written
+REM  only after the extraction succeeded, so an interrupted run leaves no
+REM  stamp and the next run replaces what it staged. The redirection comes
+REM  before `echo` on purpose: `echo %RELEASE_TAG%>file` would read the tag's
+REM  trailing digit as a stream number and write a truncated tag.
+:nv_stamp
+>"%NV_DIR%\%~1\%NV_STAMP_FILE%" echo %RELEASE_TAG%
+exit /b 0
