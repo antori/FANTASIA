@@ -1,4 +1,4 @@
-{"version": 1, "project": "FANTASIA", "counts": {"ADR": 17, "C": 12, "CR": 12, "DEC": 32, "F": 70, "G": 5, "M": 12, "NFR": 5, "NG": 4, "P": 19, "REQ": 4, "S": 3, "T": 2, "US": 34}, "kinds": {"ADR": "decision record", "C": "contract", "CR": "change request", "DEC": "implementation decision", "F": "finding", "G": "goal", "M": "module", "NFR": "quality scenario", "NG": "non-goal", "P": "principle", "REQ": "request", "S": "sprint", "T": "task", "US": "story"},
+{"version": 1, "project": "FANTASIA", "counts": {"ADR": 17, "C": 12, "CR": 12, "DEC": 32, "F": 71, "G": 5, "M": 12, "NFR": 5, "NG": 4, "P": 19, "REQ": 4, "S": 3, "T": 2, "US": 34}, "kinds": {"ADR": "decision record", "C": "contract", "CR": "change request", "DEC": "implementation decision", "F": "finding", "G": "goal", "M": "module", "NFR": "quality scenario", "NG": "non-goal", "P": "principle", "REQ": "request", "S": "sprint", "T": "task", "US": "story"},
  "nodes": [
   {"id": "G-1", "kind": "G", "src": "docs/ateam/brief.md:41", "title": "Let researchers wire a full conversational pipeline — speech in, reasoning,"},
   {"id": "G-2", "kind": "G", "src": "docs/ateam/brief.md:44", "title": "Keep every capability an independent, opt-in component, so that what works for"},
@@ -230,7 +230,8 @@
   {"category": "quality", "entries": 1, "first": "J-0225", "id": "F-067", "kind": "F", "last": "J-0225", "severity": "minor", "src": "docs/ateam/HISTORY.md:6041", "status": "open", "title": "This is the 5.9 ACE port, pre-identified, and that is the value of filing it: next time the base will be known rather than discovered."},
   {"category": "quality", "entries": 2, "first": "J-0228", "id": "F-068", "kind": "F", "last": "J-0230", "severity": "major", "src": "docs/ateam/HISTORY.md:6069", "status": "accepted", "title": "Three bundles as structured for 5.7 means roughly 4.5 GB of release assets carrying about 3.3 GB of pure duplication, and a 5.8 release of about 5.2 GB."},
   {"category": "bug", "entries": 2, "first": "J-0229", "id": "F-069", "kind": "F", "last": "J-0247", "severity": "major", "src": "docs/ateam/HISTORY.md:6084", "status": "fixed", "title": "F-013 records the stale directory name as cosmetic."},
-  {"category": "quality", "entries": 1, "first": "J-0237", "id": "F-070", "kind": "F", "last": "J-0237", "severity": "major", "src": "docs/ateam/HISTORY.md:6224", "status": "open", "title": "A gate report is evidence for the tree it ran on and for no other, and this sprint used one report as standing evidence across changes made after it."}
+  {"category": "quality", "entries": 1, "first": "J-0237", "id": "F-070", "kind": "F", "last": "J-0237", "severity": "major", "src": "docs/ateam/HISTORY.md:6224", "status": "open", "title": "A gate report is evidence for the tree it ran on and for no other, and this sprint used one report as standing evidence across changes made after it."},
+  {"category": "bug", "entries": 1, "first": "J-0249", "id": "F-071", "kind": "F", "last": "J-0249", "severity": "major", "src": "docs/ateam/HISTORY.md:6390", "status": "open", "title": "If cmd cannot run an LF-only batch file, then a clone made with core.autocrlf set to false or input - or a raw blob download - yields a bootstrap.bat that does…"}
  ],
  "edges": [
   ["ADR-0014", "derives_from", "REQ-003"],
@@ -719,6 +720,8 @@
   ["F-069", "mentions", "DEC-032"],
   ["F-070", "about", "M-tests"],
   ["F-070", "about", "US-034"],
+  ["F-071", "about", "M-dist"],
+  ["F-071", "about", "US-018"],
   ["M-ace", "consumes", "C-elevenlabs-protocol"],
   ["M-ace", "consumes", "C-fantasia-types"],
   ["M-ace", "consumes", "C-rest-tts"],

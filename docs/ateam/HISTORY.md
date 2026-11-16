@@ -6371,3 +6371,41 @@ Two batch traps are documented in the file beside the code they bite: a .bat inv
 - Evidence: bootstrap.bat's skip predicate now asks whether a plugin for THIS release is staged, not merely whether one is staged. Each extraction writes FANTASIA-bootstrap-release.txt holding RELEASE_TAG inside the staged plugin, per plugin rather than per directory so an interrupted run leaves no stamp; a fetch is skipped only when the plugin is present and stamped with this release, and a tree from another release is cleared inside the staging directory and re-fetched. NV_DIR keeps its name, so .gitignore:45 is untouched and C-install.md:23,47 and architecture.md:296 keep describing a directory that still has that name - no rename and no change request. DEC-032 at J-0246. Verified by me independently of build-dev's 41-check harness, in a scratch copy of the script (cmp byte-identical) placed where no Plugins ancestor could trigger the move step: with a matching runtime-v3.0 stamp the run skips, downloads nothing and exits 0 with the fixture intact; with the stamp removed, which is the 5.7-populated case F-069 describes, it does not skip, prints that this release's build replaces it, attempts the download, and the 5.7 sentinel file is gone - the stale tree was cleared rather than kept. The failed download exits 1 leaving no stamp, so a retry re-attempts instead of trusting a partial. setlocal EnableDelayedExpansion is at line 2, so the !NV_STAMP! comparison is live and not inert text. CRLF preserved: 549 pairs, 0 lone LF, 0 lone CR.
 - Residual: Two cases the stamp cannot see, both pre-existing and neither this finding's. A successful install empties and removes the staging directory, so the next run re-fetches 4.9 GB and then declines to overwrite the copies already in the user's Plugins folder, stranding the fresh ones in staging; fixing that means reading a stamp inside the installed plugin, which needs a decision about touching the user's Plugins folder at all. And the same old predicate is still live on the 5.7 branch, so a clone that bootstraps 5.8 and then checks out 5.7 keeps the 5.8 bundles - Alice is on that line.
 - Changes: none
+
+## J-0248 | 2026-11-16 | NOTE | lead
+- Finding: F-069
+- Module: M-dist
+- Changes: none
+
+F-069's fix is now on the 5.7 line too, at commit b28dcfa3, and Alice has been fast-forwarded to it. The user asked for this directly after build-dev flagged it as follow-up 1 of T-36.
+
+The 5.7 script is the pre-T-33 one - RELEASE_TAG runtime-v2.0, the -ue57- assets, no NVIDIA_AVAILABLE gate and no NV_EXPLICIT - so this is a port of the stamp mechanism and not a cherry-pick. The 5.8-only machinery was deliberately left out. Committed with git plumbing (hash-object, read-tree into a temporary index, write-tree, commit-tree) rather than by checking the branch out, because 5.7 has no worktree and this one holds Development; the resulting tree differs from 897275e0 in exactly one path.
+
+The property that makes the pair work, and both directions are measured rather than assumed. Each script compares a staged plugin's stamp against its OWN RELEASE_TAG, so neither needs to know the other exists: the 5.7 script replaces a tree stamped runtime-v3.0 and the 5.8 script replaces one stamped runtime-v2.0. build-dev measured both (54 checks on 5.7, 10 on the current 5.8 script); I re-ran the case this task exists for myself against a byte-identical copy of its patched file - a tree stamped runtime-v3.0 carrying a 5.8 marker is not skipped, the script prints that it is not from runtime-v2.0, the 5.8 marker and the old stamp are both gone afterwards, and the 5.7 asset is fetched.
+
+Limit worth stating plainly: this covers the staging directory only. A plugin already moved into a project's Plugins folder is left exactly as it is by both scripts, which warn instead. For Alice, whose ACE plugins live in the engine's Marketplace folder rather than the project, the fix protects the clone's staging directory and nothing else.
+
+Also found and NOT ported, because it is not F-069: on 5.7 the line 'if "%ANY_NV%"=="0" goto :done' skips the --enable-plugins handling, so 'bootstrap.bat --no-nvidia --enable-plugins' edits no .uproject there. The 5.8 script restructured that tail and does not have the gap. A real behavioural defect on the 5.7 line, build-dev's to fix as its own task.
+
+## J-0249 | 2026-11-16 | F-071 | lead
+- Event: opened
+- Module: M-dist
+- Kind: bug
+- Severity: major
+- Story: US-018
+- Repro: git check-attr -a FANTASIA/bootstrap.bat returns nothing on both Development and 5.7: .gitattributes carries only LFS rules and no '*.bat text eol=crlf'. The committed blob is LF-only (git show origin/main:FANTASIA/bootstrap.bat gives 0 CRLF and 549 lone LF), so the line endings a user receives depend entirely on their own core.autocrlf. This machine has it true, which is why the working tree is CRLF and why nobody has met the LF form.
+- Changes: none
+
+If cmd cannot run an LF-only batch file, then a clone made with core.autocrlf set to false or input - or a raw blob download - yields a bootstrap.bat that does not fail cleanly but spins, which is the worst failure mode for the first command a new user runs. One line in .gitattributes removes the question entirely.
+
+The severity above rests on a reproduction that is NOT settled, and this finding exists to settle it rather than to assert it.
+
+build-dev measured a clean A/B over four bounded runs of the 5.7 script (scratchpad lfab): the LF form hung and was killed at 15 s having emitted 140,944 bytes of stderr and 1368 'not recognized' errors, both before and after its patch, while the CRLF form of the same file finished cleanly with exit 0. It first met this when its own test suite spun out 2.8 MB of mangled-command errors.
+
+I could not reproduce it. Against LF-only copies taken straight from the blobs: the 5.8 script with --bogus printed usage and exited 1; with four arguments it ran the whole shift loop and reached 'Bootstrap complete'; the 5.7 script with --minimal --no-model completed; and the 5.7 script driven into its NVIDIA fetch block with a failing curl shim printed the download line and the error and exited, all with zero mangled commands.
+
+The difference is depth, and that is the lead to follow. Every path I exercised stops at or before the first failed download. build-dev's A8 ran four SUCCESSFUL downloads and reached extraction, the 'for /d' loop and the move logic - materially more code, and exactly where a byte-offset parsing failure in cmd would be expected to appear, since the classic symptom (a leading character eaten, hence 'hift' for 'shift') comes from cmd seeking to an offset computed as if the file had CRLF.
+
+So the open question is not whether LF is risky in principle but which construct breaks, and whoever takes this should reproduce build-dev's A8 conditions - successful extractions, not a failing shim - before deciding. If it reproduces, the one-line fix is cheap insurance whatever the mechanism; if it does not, this closes as not-a-defect and build-dev's memory note should be retired with it.
+
+Not filed by build-dev, which flagged it as outside T-37 and offered; filed here because the two measurements disagree and that disagreement is the finding.
