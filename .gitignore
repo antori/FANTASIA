@@ -84,10 +84,12 @@ Thumbs.db
 *.pyc
 __pycache__/
 
-# ATeam working directory: recovery reports (inventory/deps/reflexion JSON), the
-# journal lock and the ownership log. All regenerated output. The design itself is
-# tracked, under docs/ateam/.
+# ATeam: the method's data stays on the machine that runs the team, as the team's
+# own definitions do. .ateam/ holds the lead memory, the recovery reports, the
+# journal lock and the ownership log; docs/ateam/ holds the design, the state
+# documents and the journal.
 .ateam/
+docs/ateam/
 
 # Tools — keep Claude Code dev artifacts out of the repo
 .claude/
