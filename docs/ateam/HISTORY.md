@@ -6409,3 +6409,14 @@ The difference is depth, and that is the lead to follow. Every path I exercised 
 So the open question is not whether LF is risky in principle but which construct breaks, and whoever takes this should reproduce build-dev's A8 conditions - successful extractions, not a failing shim - before deciding. If it reproduces, the one-line fix is cheap insurance whatever the mechanism; if it does not, this closes as not-a-defect and build-dev's memory note should be retired with it.
 
 Not filed by build-dev, which flagged it as outside T-37 and offered; filed here because the two measurements disagree and that disagreement is the finding.
+
+## J-0250 | 2026-11-19 | NOTE | ateam-update
+- Update: ATeam 0.28.0 -> 0.29.0
+- Changes: team.json
+
+Done:
+- rendered agent definitions: planner (updated), core-dev (updated), speech-dev (updated), reasoning-dev (updated), build-dev (updated), test-dev (updated), tester (updated), security (updated), reviewer (updated)
+- CLAUDE.md protocol block updated
+
+Decisions still pending (/ateam:update):
+- no advisor, whom an agent that cannot conclude escalates to (on Fable, run only on the user's approval): add one through /ateam:change (type team)
