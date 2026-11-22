@@ -104,8 +104,10 @@ FANTASIA is distributed prebuilt — for most users, no compilation is required.
 > **This is the UE 5.8 release.** The `FANTASIAACE` companion plugin and the NVIDIA Audio2Face bundles are available on this line, and `bootstrap.bat` installs the NVIDIA side by default — see [NVIDIA Audio2Face lip-sync](#nvidia-audio2face-lip-sync).
 
 1. If your UE project does not already have one, create a `Plugins` folder at the project root.
-2. Clone or download this repository and put the `FANTASIA` folder into that `Plugins` folder.
-3. From `Plugins/FANTASIA/FANTASIA/`, run `bootstrap.bat` (Windows) or `bootstrap.sh` (Linux/macOS). **By default it installs everything published for your platform**, fetched from this repo's GitHub Releases (hosted there instead of LFS to keep clones lean). The default pulls:
+2. Get this repository and put the `FANTASIA` folder into that `Plugins` folder. There are two routes, and they are not interchangeable:
+   - **Download the ZIP** (*Code → Download ZIP*) — the simplest route, and the one with no prerequisites. GitHub resolves the repository's Git LFS objects server-side, so the archive already contains the real prebuilt binaries.
+   - **`git clone`** — needs **[Git LFS](https://git-lfs.com)** installed, with `git lfs install` run once on the machine. Git for Windows ships it and enables it during setup; elsewhere, and in CI images and containers, it is usually absent — `git lfs version` tells you. The prebuilt DLLs are tracked as LFS objects, and without the filter the clone still *succeeds*: every `.dll` arrives as a few lines of text under its real name, and the editor then reports a missing or corrupt module rather than anything about LFS. If you already cloned without it, install Git LFS and run `git lfs pull` in the clone.
+3. From `Plugins/FANTASIA/FANTASIA/`, run `bootstrap.bat` (Windows) or `bootstrap.sh` (Linux/macOS). **By default it installs everything published for your platform**, fetched from this repo's GitHub Releases (these multi-gigabyte artifacts are release assets rather than tracked files — not in LFS either — which is what keeps a clone small). The default pulls:
    - **Whisper ASR model** (~574 MB).
    - **Prebuilt GPU whisper stack** (~540 MB, Windows) — flip `UWhisperSubsystem.Backend = GPU`, no rebuild.
    - **Win64 build-time static libs** (~330 MB: aGrUM, gRPC, OpenSSL) for C++ recompiles.
@@ -156,6 +158,8 @@ FANTASIA bundles or fetches code from several third-party projects (whisper.cpp,
 ## Troubleshooting
 
 If the editor says a plugin was **"built with a different engine version"**, you are running an engine build whose compatible changelist differs from the one the shipped DLLs were built against. Rebuild the plugin from source, or use the release matching your engine version.
+
+If the editor reports a FANTASIA module as **missing or corrupt**, and you installed by `git clone`, check Git LFS first: run `git lfs version`, then `git lfs pull` in the clone. A clone made without the LFS filter leaves each prebuilt DLL as a few lines of pointer text under its real name, so the files look present and are not loadable.
 
 If the editor reports that your project cannot be launched because of FANTASIA, verify that the SWI-Prolog runtime DLLs shipped alongside `UnrealEditor-FANTASIA.dll` in `FANTASIA/Binaries/Win64/` have been copied next to your project's binaries. The Prolog component loads its dependencies at editor startup; if they are missing, the plugin fails to initialize.
 

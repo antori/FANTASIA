@@ -6,3 +6,17 @@
 *.exp filter=lfs diff=lfs merge=lfs -text
 *.bin filter=lfs diff=lfs merge=lfs -text
 *.nupkg filter=lfs diff=lfs merge=lfs -text
+
+# The first-party scripts beside bootstrap.bat, so that the line endings a user receives
+# do not depend on the user's own core.autocrlf. cmd reads a batch file in blocks and
+# resumes at a byte offset, so an LF-only .bat makes it execute fragments of its own text:
+# measured on the committed blob, the LF form exits 255 having run 18 text fragments as
+# commands and fetched nothing, while the same bytes as CRLF complete (F-071). CRLF breaks
+# bash as surely as LF breaks cmd, hence the second line.
+#
+# Both patterns contain a slash, so they are anchored here and '*' does not cross one: they
+# reach the scripts directly beside bootstrap.bat and nothing deeper. The nine vendored
+# scripts under FANTASIA/ThirdParty/ are in the same state and are not ours to renormalize.
+# No .ps1 rule: PowerShell reads either form, and the hazard is cmd's offset arithmetic.
+FANTASIA/*.bat text eol=crlf
+FANTASIA/*.sh text eol=lf
