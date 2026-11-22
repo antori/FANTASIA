@@ -703,15 +703,20 @@ Write-Step "the suite runs FANTASIA only; FANTASIAACE has no test module and is 
 # manifest per build configuration (Development and DebugGame today), and a manifest
 # names as many modules as that configuration built, so there are more modules than
 # manifests -- FANTASIA's names both FANTASIA and FANTASIATests.
+#
+# Returns { manifests; error }, and never stops the run: 'error' names the first manifest
+# that is not readable JSON, and the caller refuses on it.
 function Get-CommittedModules([string] $PluginName, [string] $Directory) {
     $found = New-Object Collections.ArrayList
-    if (-not (Test-Path -LiteralPath $Directory)) { return ,@() }
+    $result = [ordered] @{ manifests = @(); error = $null }
+    if (-not (Test-Path -LiteralPath $Directory)) { return $result }
     foreach ($file in (Get-ChildItem -LiteralPath $Directory -Filter '*.modules' -File)) {
         try {
             $manifest = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
         }
         catch {
-            Stop-Gate 13 "the committed manifest '$($file.FullName)' is not readable JSON, so the BuildId $PluginName tells a user about cannot be compared with the engine's. Underlying error: $($_.Exception.Message)"
+            $result.error = "the committed manifest '$($file.FullName)' is not readable JSON, so the BuildId $PluginName tells a user about cannot be compared with the engine's. Underlying error: $($_.Exception.Message)"
+            return $result
         }
         $modules = New-Object Collections.ArrayList
         foreach ($property in $manifest.Modules.PSObject.Properties) {
@@ -727,7 +732,8 @@ function Get-CommittedModules([string] $PluginName, [string] $Directory) {
             modules  = @($modules.ToArray())
         })
     }
-    return ,@($found.ToArray())
+    $result.manifests = @($found.ToArray())
+    return $result
 }
 
 # Whether each plugin's committed module binaries can be the product of the source beside
@@ -1077,7 +1083,9 @@ if (Test-Path -LiteralPath $AceDescriptor) { $pluginBinaries['FANTASIAACE'] = $A
 
 $manifests = New-Object Collections.ArrayList
 foreach ($plugin in @($pluginBinaries.Keys)) {
-    $set = Get-CommittedModules $plugin $pluginBinaries[$plugin]
+    $committed = Get-CommittedModules $plugin $pluginBinaries[$plugin]
+    if ($null -ne $committed.error) { Stop-Gate 13 $committed.error }
+    $set = @($committed.manifests)
     if ($set.Count -eq 0) {
         Stop-Gate 13 "'$($pluginBinaries[$plugin])' holds no '.modules' manifest, so $plugin ships no prebuilt module and a user who compiles nothing receives nothing of it (US-019)."
     }
@@ -1224,9 +1232,8 @@ else {
     $wrong = New-Object Collections.ArrayList
     foreach ($line in @($tracked)) {
         # 'i/<index>\tw/<worktree>\tattr/<attrs>\t<path>', with the columns padded. The path
-        # is taken from after the last tab rather than by a column regex, because the attr
-        # field holds 'text eol=lf' -- two words -- and a regex expecting one silently
-        # skipped every file that had an attribute at all.
+        # is taken from after the last tab, because the attr field can hold several words
+        # ('text eol=lf') and so has no fixed column.
         $columns = "$line" -split "`t"
         if ($columns.Count -lt 2) { continue }
         $path = $columns[$columns.Count - 1].Trim()
@@ -1362,16 +1369,10 @@ if ($junctionTarget -ne $PluginDir) {
     }
 }
 
-$script:Run.harness.project = $uproject
-
-if ($Prebuilt) {
-    # A CONTENT-ONLY host project, which is the mode's first claim and the reason it can
-    # say anything about a Blueprint-only user at all. There is no "Modules" key, so the
-    # project declares no C++ module of its own, and there is no Source directory for a
-    # build tool to find: UnrealBuildTool is never invoked, and there is nothing it could
-    # have been invoked on. The editor the engine already ships boots this project and
-    # loads FANTASIA's committed module DLLs through the junction, exactly as a user's
-    # project does.
+# The prebuilt mode's host project: a .uproject declaring no module, written at $Path.
+function New-ContentOnlyHarness([string] $Path, [string] $EngineLine) {
+    $requiredLine = $EngineLine
+    $uproject = $Path
     Set-FileIfChanged $uproject @"
 {
 	"FileVersion": 3,
@@ -1385,32 +1386,16 @@ if ($Prebuilt) {
 	]
 }
 "@
-
-    # Proved rather than assumed, and in the two places the claim could fail: a Source tree
-    # left behind by an earlier run or by a hand edit would make this a code project, and a
-    # "Modules" key would make the editor demand a build of a module that does not exist.
-    # The Source directory is removed rather than merely refused, because it is generated
-    # and outside this repository -- then the absence is asserted, so that a removal which
-    # did not take is a refusal and not a silent pass.
-    if (Test-Path -LiteralPath $sourceDir) {
-        Remove-Item -LiteralPath $sourceDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    if (Test-Path -LiteralPath $sourceDir) {
-        Stop-Gate 20 "'$sourceDir' still exists, so the host project is a code project and this mode cannot claim that nothing was compiled. Delete it and run again."
-    }
-    $declared = @((Get-Content -LiteralPath $uproject -Raw | ConvertFrom-Json).Modules)
-    if (@($declared | Where-Object { $null -ne $_ }).Count -gt 0) {
-        Stop-Gate 20 "'$uproject' declares $(@($declared).Count) module(s), so the editor would require them to be built. The prebuilt mode's host project must declare none."
-    }
-    $script:Run.harness.hostProjectHasSource = $false
-    # '${uproject}:' and not '$uproject:', which PowerShell reads as a drive-qualified
-    # variable and refuses to parse.
-    Write-Step "content-only harness project ${uproject}: no Source directory, no declared module, no build tool invoked"
 }
-else {
 
-$script:Run.harness.hostProjectHasSource = $true
-
+# The compiled mode's host project: a .uproject declaring one module named $Name, and the
+# Source tree that module needs, under $Root. The here-strings stay at column zero because a
+# closing '"@' must start its line.
+function New-CodeHarness([string] $Root, [string] $Name, [string] $EngineLine) {
+    $requiredLine = $EngineLine
+    $HarnessName = $Name
+    $uproject = Join-Path $Root "$Name.uproject"
+    $sourceDir = Join-Path $Root 'Source'
 Set-FileIfChanged $uproject @"
 {
 	"FileVersion": 3,
@@ -1481,13 +1466,46 @@ Set-FileIfChanged (Join-Path $sourceDir "$HarnessName\$HarnessName.cpp") @"
 
 IMPLEMENT_PRIMARY_GAME_MODULE(FDefaultGameModuleImpl, $HarnessName, "$HarnessName");
 "@
-
-Write-Step "code harness project $uproject"
-
 }
-# The compiled mode's generated files are written at column zero rather than indented
-# inside the branch above: a here-string's closing '"@' must start the line, so the whole
-# block cannot be indented without changing the file contents it writes.
+
+$script:Run.harness.project = $uproject
+
+if ($Prebuilt) {
+    # A CONTENT-ONLY host project, which is the mode's first claim and the reason it can
+    # say anything about a Blueprint-only user at all. There is no "Modules" key, so the
+    # project declares no C++ module of its own, and there is no Source directory for a
+    # build tool to find: UnrealBuildTool is never invoked, and there is nothing it could
+    # have been invoked on. The editor the engine already ships boots this project and
+    # loads FANTASIA's committed module DLLs through the junction, exactly as a user's
+    # project does.
+    New-ContentOnlyHarness $uproject $requiredLine
+
+    # Proved rather than assumed, and in the two places the claim could fail: a Source tree
+    # left behind by an earlier run or by a hand edit would make this a code project, and a
+    # "Modules" key would make the editor demand a build of a module that does not exist.
+    # The Source directory is removed rather than merely refused, because it is generated
+    # and outside this repository -- then the absence is asserted, so that a removal which
+    # did not take is a refusal and not a silent pass.
+    if (Test-Path -LiteralPath $sourceDir) {
+        Remove-Item -LiteralPath $sourceDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $sourceDir) {
+        Stop-Gate 20 "'$sourceDir' still exists, so the host project is a code project and this mode cannot claim that nothing was compiled. Delete it and run again."
+    }
+    $declared = @((Get-Content -LiteralPath $uproject -Raw | ConvertFrom-Json).Modules)
+    if (@($declared | Where-Object { $null -ne $_ }).Count -gt 0) {
+        Stop-Gate 20 "'$uproject' declares $(@($declared).Count) module(s), so the editor would require them to be built. The prebuilt mode's host project must declare none."
+    }
+    $script:Run.harness.hostProjectHasSource = $false
+    # '${uproject}:' and not '$uproject:', which PowerShell reads as a drive-qualified
+    # variable and refuses to parse.
+    Write-Step "content-only harness project ${uproject}: no Source directory, no declared module, no build tool invoked"
+}
+else {
+    $script:Run.harness.hostProjectHasSource = $true
+    New-CodeHarness $harnessRoot $HarnessName $requiredLine
+    Write-Step "code harness project $uproject"
+}
 
 # Both the report and the log are evidence about THIS run, so none may survive from an
 # earlier one: a stale log would let the module-load check below pass on a run during
