@@ -141,19 +141,20 @@
     The automation test prefix to run. Default 'FANTASIA', the whole suite.
 
 .PARAMETER MinTests
-    The run fails if the report names fewer tests than this. Default 134, a floor and not
-    an expected count: it is the number the suite could not fall below in any supported
-    build configuration when it was set, 150 tests then running of which 16 are compiled
-    only when the aGrUM binding is (WITH_AGRUM_BINDING, all of BayesianNetworkTests.cpp
-    and InfluenceDiagTests.cpp, the suite's only conditional compilation). How many tests
-    a run actually found is in that run's record, which is the one place it cannot go
-    stale; this parameter says only how few would mean the suite had shrunk.
+    The run fails if the report names fewer tests than this. Default 214, the whole suite
+    on the supported configuration (Win64 with the aGrUM binding), so that a single test
+    missing from it turns the default run red. A build without the aGrUM binding is the
+    exception and states its own floor: the default less the 16 tests compiled only under
+    WITH_AGRUM_BINDING (all of BayesianNetworkTests.cpp and InfluenceDiagTests.cpp, the
+    suite's only conditional compilation), today -MinTests 198. The default is reset to
+    the new count in the same change that adds or removes tests. How many tests a run
+    actually found is in that run's record.
 
-    The floor is the same in both modes, and deliberately: it describes the suite's one
-    piece of conditional compilation, not how fresh the committed DLLs are. The prebuilt
-    mode runs whatever suite the committed DLL holds, which is fewer tests than the source
-    holds whenever source has landed since the last refresh -- and that gap is what exit 19
-    is for, not something to encode as a second floor here.
+    The floor is the same in both modes, and deliberately: it describes the suite, not how
+    fresh the committed DLLs are. The prebuilt mode runs whatever suite the committed DLL
+    holds, which is fewer tests than the source holds whenever source has landed since the
+    last refresh -- and that gap is what exit 19 is for, not something to encode as a
+    second floor here.
 
 .OUTPUTS
     Exit 0 only when nothing the mode requires went wrong (the compile succeeded in the
@@ -213,7 +214,7 @@
 param(
     [string] $Mode = 'compiled',
     [string] $Tests = 'FANTASIA',
-    [int]    $MinTests = 134
+    [int]    $MinTests = 214
 )
 
 $ErrorActionPreference = 'Stop'
