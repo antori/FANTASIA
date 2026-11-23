@@ -196,7 +196,7 @@ FANTASIA would not be the same without the precious contribution from the Lingui
 
 - [Dr. Maria Di Maro](https://www.linkedin.com/in/maria-di-maro-b43261120/) — (PhD) Common ground management and clarification request generation
 - [Dr. Martina Di Bratto](https://www.linkedin.com/in/martina-di-bratto-95034322b/) — (PhD) Argumentative dialogue management
-- [Dr. Elena Sofia Safina](www.linkedin.com/in/elena-sofia-safina) - (PhD) Stigma manifestations in language
+- [Dr. Elena Sofia Safina](https://www.linkedin.com/in/elena-sofia-safina) - (PhD) Stigma manifestations in language
 
 Special thanks to the students who contributed to FANTASIA:
 
